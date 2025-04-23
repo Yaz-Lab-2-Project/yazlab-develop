@@ -1,0 +1,11 @@
+# Proje genelinde goz ardi edilecek dosyalar 
+# Backend ozel goz ardi edilecekler 
+/backend/.env 
+/backend/__pycache__/ 
+/backend/*.sqlite3 
+# Frontend ozel goz ardi edilecekler 
+/frontend/node_modules/ 
+/frontend/build/ 
+/frontend/.pnp* 
+/frontend/.env*.local 
+/frontend/.env 

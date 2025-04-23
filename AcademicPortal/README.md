@@ -1,0 +1,1 @@
+# AcademicPortal Projesi README 

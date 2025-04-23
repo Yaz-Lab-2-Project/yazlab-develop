@@ -1,0 +1,9 @@
+# Backend spesifik gitignore 
+__pycache__/ 
+*.log 
+*.pot 
+*.pyc 
+db.sqlite3 
+media/ 
+staticfiles/ 
+.env 
