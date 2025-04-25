@@ -1,8 +1,6 @@
 from django.contrib import admin
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
-
-from apps.users.views import UserViewSet
 from apps.temel_alan.views import TemelAlanViewSet
 from apps.birim.views import BirimViewSet
 from apps.bolum.views import BolumViewSet
@@ -21,7 +19,6 @@ from apps.juri.views import JuriAtamaViewSet, JuriDegerlendirmeViewSet
 from apps.bildirim.views import BildirimViewSet
 
 router = DefaultRouter()
-router.register(r'users', UserViewSet)
 router.register(r'temel-alan', TemelAlanViewSet)
 router.register(r'birim', BirimViewSet)
 router.register(r'bolum', BolumViewSet)
@@ -41,6 +38,10 @@ router.register(r'juri-degerlendirmeler', JuriDegerlendirmeViewSet)
 router.register(r'bildirimler', BildirimViewSet)
 
 urlpatterns = [
-    path('admin/', admin.site.urls),
-    path('api/', include(router.urls)),
+  path('admin/', admin.site.urls),
+  path('api/', include(router.urls)),
+  path('api/', include('apps.users.urls')),
 ]
+
+
+

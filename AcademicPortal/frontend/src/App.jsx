@@ -1,15 +1,22 @@
-import { BrowserRouter as Router, Routes, Route, Navigate } from "react-router-dom";
-import React from "react";
+// src/App.jsx
+
+import React, { useState, useEffect } from "react";
+import {
+  BrowserRouter as Router,
+  Routes,
+  Route,
+  Navigate
+} from "react-router-dom";
 import Login from "./pages/auth/Login";
 
-//User Pages
+// User Pages
 import Listings from "./pages/user/Listings";
 import Apply from "./pages/user/Apply";
 import MyApplications from "./pages/user/MyApplications";
 import Profile from "./pages/user/Profile";
 import UserDashboard from "./pages/user/Dashboard";
 
-//Admin Pages
+// Admin Pages
 import AdminAdvertisements from "./pages/admin/Advertisements";
 import AdminApplications from "./pages/admin/Applications";
 import AdminUsers from "./pages/admin/Users";
@@ -30,26 +37,53 @@ import Basvurular from "./pages/manager/Basvurular";
 import CriteriaPage from "./pages/manager/CriteriaPage";
 import ManagerProfile from "./pages/manager/Profile";
 
-const ProtectedRoute = ({ children, allowedRole }) => {
-  const role = localStorage.getItem("role");
-  if (!role || role !== allowedRole) {
+function ProtectedRoute({ children, allowedRole }) {
+  const [status, setStatus] = useState({ loading: true, role: null });
+
+  useEffect(() => {
+    fetch("/api/current-user/", {
+      credentials: "include",
+      headers: { "Content-Type": "application/json" }
+    })
+      .then(res => {
+        if (!res.ok) throw new Error();
+        return res.json();
+      })
+      .then(user => {
+        // Django tarafında `user_type` alanı gelir: "ADAY", "ADMIN", "YONETICI", "JURI"
+        setStatus({ loading: false, role: user.user_type.toLowerCase() });
+      })
+      .catch(() => {
+        setStatus({ loading: false, role: null });
+      });
+  }, []);
+
+  if (status.loading) {
+    return <div>Yükleniyor...</div>;
+  }
+
+  if (!status.role || status.role !== allowedRole) {
     return <Navigate to="/login" replace />;
   }
+
   return children;
-};
+}
 
 export default function App() {
   return (
     <Router>
       <Routes>
-        <Route path="/" element={<Navigate to="/user" replace />} />
+        {/* Redirect root to login or user dashboard */}
+        <Route path="/" element={<Navigate to="/login" replace />} />
+
+        {/* Auth */}
         <Route path="/login" element={<Login />} />
 
-        {/* User Links */}
+        {/* User */}
         <Route
           path="/user"
           element={
-            <ProtectedRoute allowedRole="user">
+            <ProtectedRoute allowedRole="aday">
               <UserDashboard />
             </ProtectedRoute>
           }
@@ -57,16 +91,37 @@ export default function App() {
         <Route
           path="/listing"
           element={
-            <ProtectedRoute allowedRole="user">
+            <ProtectedRoute allowedRole="aday">
               <Listings />
             </ProtectedRoute>
           }
         />
-        <Route path="/apply" element={<Apply />} />
-        <Route path="/basvurularim" element={<MyApplications />} />
-        <Route path="/profile" element={<Profile />} />
+        <Route
+          path="/apply"
+          element={
+            <ProtectedRoute allowedRole="aday">
+              <Apply />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/basvurularim"
+          element={
+            <ProtectedRoute allowedRole="aday">
+              <MyApplications />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/profile"
+          element={
+            <ProtectedRoute allowedRole="aday">
+              <Profile />
+            </ProtectedRoute>
+          }
+        />
 
-        {/* Admin Links */}
+        {/* Admin */}
         <Route
           path="/admin"
           element={
@@ -100,11 +155,11 @@ export default function App() {
           }
         />
 
-        {/* Manager Links */}
+        {/* Manager */}
         <Route
           path="/manager"
           element={
-            <ProtectedRoute allowedRole="manager">
+            <ProtectedRoute allowedRole="yonetici">
               <ManagerDashboard />
             </ProtectedRoute>
           }
@@ -112,7 +167,7 @@ export default function App() {
         <Route
           path="/manager-ilan"
           element={
-            <ProtectedRoute allowedRole="manager">
+            <ProtectedRoute allowedRole="yonetici">
               <İlan />
             </ProtectedRoute>
           }
@@ -120,7 +175,7 @@ export default function App() {
         <Route
           path="/manager-juri-atama"
           element={
-            <ProtectedRoute allowedRole="manager">
+            <ProtectedRoute allowedRole="yonetici">
               <JuriAtama />
             </ProtectedRoute>
           }
@@ -128,7 +183,7 @@ export default function App() {
         <Route
           path="/manager-basvurular"
           element={
-            <ProtectedRoute allowedRole="manager">
+            <ProtectedRoute allowedRole="yonetici">
               <Basvurular />
             </ProtectedRoute>
           }
@@ -136,7 +191,7 @@ export default function App() {
         <Route
           path="/manager-criteriapage"
           element={
-            <ProtectedRoute allowedRole="manager">
+            <ProtectedRoute allowedRole="yonetici">
               <CriteriaPage />
             </ProtectedRoute>
           }
@@ -144,17 +199,17 @@ export default function App() {
         <Route
           path="/manager-profile"
           element={
-            <ProtectedRoute allowedRole="manager">
+            <ProtectedRoute allowedRole="yonetici">
               <ManagerProfile />
             </ProtectedRoute>
           }
         />
 
-        {/* Jury Links */}
+        {/* Jury */}
         <Route
           path="/jury"
           element={
-            <ProtectedRoute allowedRole="jury">
+            <ProtectedRoute allowedRole="juri">
               <JuryDashboard />
             </ProtectedRoute>
           }
@@ -162,7 +217,7 @@ export default function App() {
         <Route
           path="/jury-rapor"
           element={
-            <ProtectedRoute allowedRole="jury">
+            <ProtectedRoute allowedRole="juri">
               <Rapor />
             </ProtectedRoute>
           }
@@ -170,7 +225,7 @@ export default function App() {
         <Route
           path="/jury-reviews"
           element={
-            <ProtectedRoute allowedRole="jury">
+            <ProtectedRoute allowedRole="juri">
               <Reviews />
             </ProtectedRoute>
           }
@@ -178,7 +233,7 @@ export default function App() {
         <Route
           path="/jury-applications"
           element={
-            <ProtectedRoute allowedRole="jury">
+            <ProtectedRoute allowedRole="juri">
               <Applications />
             </ProtectedRoute>
           }
@@ -186,13 +241,14 @@ export default function App() {
         <Route
           path="/jury-userapplication"
           element={
-            <ProtectedRoute allowedRole="jury">
+            <ProtectedRoute allowedRole="juri">
               <UserApplication />
             </ProtectedRoute>
           }
         />
-        <Route path="/applications" element={<Applications />} />
-        <Route path="/user-application/:id" element={<UserApplication />} />
+
+        {/* Catch-all */}
+        <Route path="*" element={<Navigate to="/login" replace />} />
       </Routes>
     </Router>
   );
