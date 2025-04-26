@@ -24,9 +24,14 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
+    'django.contrib.sites',
 
     # Üçüncü taraf
     'rest_framework',
+    'rest_framework.authtoken',
+    'dj_rest_auth',
+    'corsheaders',
+
 
     # Projenin app’leri
     'apps.users',
@@ -46,14 +51,30 @@ INSTALLED_APPS = [
     'apps.bildirim',
 ]
 
+SITE_ID = 1
+
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
+    'corsheaders.middleware.CorsMiddleware',  # BURAYA EKLEYİN (CommonMiddleware'den önce)
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
+]
+
+CORS_ALLOWED_ORIGINS = [
+    "http://localhost:5173",  # Frontend uygulamanızın adresi
+    "http://127.0.0.1:5173", # Bazen bu da gerekebilir
+    # Gerekirse canlı sunucu adresinizi de buraya eklersiniz
+]
+
+CORS_ALLOW_CREDENTIALS = True
+
+CSRF_TRUSTED_ORIGINS = [
+    'http://localhost:5173',
+    'http://127.0.0.1:5173',
 ]
 
 ROOT_URLCONF = 'academic_portal.urls'
@@ -130,5 +151,21 @@ REST_FRAMEWORK = {
     ],
 }
 
+REST_AUTH = {
+    # Bu satır, /api/auth/user/ endpoint'inin sizin serializer'ınızı kullanmasını sağlar
+    'USER_DETAILS_SERIALIZER': 'apps.users.serializers.UserSerializer',
+
+    # İhtiyaç duyarsanız diğer dj-rest-auth ayarlarını buraya ekleyebilirsiniz
+    # Örn: 'REGISTER_SERIALIZER': 'apps.users.serializers.CustomRegisterSerializer',
+}
+
 # Varsayılan auto field
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+
+
+SESSION_COOKIE_HTTPONLY = True
+
+CSRF_COOKIE_HTTPONLY = False
+
+
+ALLOWED_HOSTS = ['localhost', '127.0.0.1']

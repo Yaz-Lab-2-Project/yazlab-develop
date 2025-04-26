@@ -1,94 +1,122 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import UserNavbar from "../../components/navbars/UserNavbar";
 
-const ilanlar = [
-  {
-    id: 1,
-    unvan: "Dr. Öğr. Üyesi",
-    birim: "Mühendislik Fakültesi",
-    bölüm: "Bilgisayar Mühendisliği",
-    baslangicTarihi: "2025-04-01",
-    bitisTarihi: "2025-04-20",
-  },
-  {
-    id: 2,
-    unvan: "Doçent",
-    birim: "İktisadi ve İdari Bilimler Fakültesi",
-    bölüm: "İşletme",
-    baslangicTarihi: "2025-03-30",
-    bitisTarihi: "2025-04-18",
-  },
-  {
-    id: 3,
-    unvan: "Profesör",
-    birim: "Fen-Edebiyat Fakültesi",
-    bölüm: "Fizik",
-    baslangicTarihi: "2025-04-05",
-    bitisTarihi: "2025-04-25",
-  },
-  {
-    id: 4,
-    unvan: "Dr. Öğr. Üyesi",
-    birim: "Sağlık Bilimleri Fakültesi",
-    bölüm: "Beslenme ve Diyetetik",
-    baslangicTarihi: "2025-04-02",
-    bitisTarihi: "2025-04-21",
-  },
-];
-
+// --- IlanCard Bileşeni ---
 const IlanCard = ({ ilan }) => {
   const navigate = useNavigate();
 
+  // Yönlendirmeyi URL parametresi ile yap
   const handleRedirect = () => {
-    localStorage.setItem("ilanId", ilan.id); // ilanId'yi localStorage'a kaydet
-    navigate("/apply"); // /apply rotasına yönlendir
+    // localStorage.setItem("ilanId", ilan.id); // localStorage KULLANMA
+    navigate(`/apply/${ilan.id}`); // /apply/:ilanId rotasına yönlendir
   };
 
+  // Tarih formatlama (isteğe bağlı)
+  const formatDate = (dateString) => {
+    if (!dateString) return "";
+    try {
+      return new Date(dateString).toLocaleDateString("tr-TR");
+    } catch (e) {
+      return dateString; // Hata olursa orijinalini göster
+    }
+  };
   return (
     <div className="ilan-card">
-      <h2 className="ilan-title">{ilan.unvan}</h2>
-      <p className="ilan-detail">{ilan.birim}</p>
-      <p className="ilan-detail">{ilan.bölüm}</p>
+      <h2 className="ilan-title">{ilan.baslik || ilan.kadro_tipi_ad || ilan.unvan || 'Başlık Yok'}</h2>
+      <p className="ilan-detail">{ilan.birim_ad || ilan.birim?.ad || ilan.birim || 'Birim Belirtilmemiş'}</p>
+      <p className="ilan-detail">{ilan.bolum_ad || ilan.bolum?.ad || ilan.bolum || 'Bölüm Belirtilmemiş'}</p>
+      {/* <p className="ilan-detail">Anabilim Dalı: {ilan.anabilim_dali_ad || ilan.anabilim_dali?.ad || ''}</p> */}
       <p className="ilan-dates">
-        Başvuru Tarihleri: {ilan.baslangicTarihi} - {ilan.bitisTarihi}
+        Başvuru Tarihleri: {formatDate(ilan.baslangic_tarihi)} - {formatDate(ilan.bitis_tarihi)}
       </p>
+      {/* İlanın aktif olup olmadığını gösterebiliriz */}
+      {/* <p>Durum: {ilan.aktif ? 'Aktif' : 'Pasif'}</p> */}
       <button className="ilan-button" onClick={handleRedirect}>
-        Detayları Gör
+        Detayları Gör ve Başvur
       </button>
     </div>
   );
 };
 
+
+// --- IlanListesi Bileşeni ---
 const IlanListesi = () => {
+  const [ilanlarData, setIlanlarData] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
   const [filtre, setFiltre] = useState("");
 
-  const filtrelenmisIlanlar = ilanlar.filter(
-    (ilan) =>
-      ilan.unvan.toLowerCase().includes(filtre.toLowerCase()) ||
-      ilan.birim.toLowerCase().includes(filtre.toLowerCase()) ||
-      ilan.bölüm.toLowerCase().includes(filtre.toLowerCase())
+  useEffect(() => {
+    setLoading(true);
+    setError(null);
+    fetch('http://localhost:8000/api/ilanlar/', { credentials: 'include' })
+      .then(res => {
+        if (!res.ok) {
+          throw new Error(`Veri çekilemedi (${res.status})`);
+        }
+        return res.json();
+      })
+      .then(data => {
+        // Gelen verinin yapısına göre ayarlayın (DRF pagination kullanıyorsa data.results olabilir)
+        setIlanlarData(data.results || data);
+      })
+      .catch(err => {
+        console.error("İlanları çekerken hata:", err);
+        setError(err.message);
+      })
+      .finally(() => {
+        setLoading(false);
+      });
+  }, []); // Sadece component mount olduğunda çalışır
+
+  // Filtreleme işlemini API'den gelen veri üzerinde yap
+  const filtrelenmisIlanlar = ilanlarData.filter(
+    (ilan) => {
+        // API'den gelen gerçek alan adlarına göre filtrele
+        const searchString = filtre.toLowerCase();
+        return (
+            (ilan.baslik && ilan.baslik.toLowerCase().includes(searchString)) ||
+            (ilan.kadro_tipi_ad && ilan.kadro_tipi_ad.toLowerCase().includes(searchString)) || // veya ilan.kadro_tipi?.tip
+            (ilan.birim_ad && ilan.birim_ad.toLowerCase().includes(searchString)) || // veya ilan.birim?.ad
+            (ilan.bolum_ad && ilan.bolum_ad.toLowerCase().includes(searchString)) // veya ilan.bolum?.ad
+        );
+    }
   );
+
+  if (loading) {
+    return <div className="ilan-listesi"><p>İlanlar yükleniyor...</p></div>;
+  }
+
+  if (error) {
+    return <div className="ilan-listesi"><p>Hata: {error}</p></div>;
+  }
 
   return (
     <div className="ilan-listesi">
       <h1 className="ilan-header">Akademik İlanlar</h1>
       <input
         type="text"
-        placeholder="Unvan, birim veya bölüm ara..."
+        placeholder="Başlık, unvan, birim veya bölüm ara..." // Placeholder güncellendi
         className="ilan-search"
         value={filtre}
         onChange={(e) => setFiltre(e.target.value)}
       />
       <div className="ilan-grid">
-        {filtrelenmisIlanlar.map((ilan) => (
-          <IlanCard key={ilan.id} ilan={ilan} />
-        ))}
+        {filtrelenmisIlanlar.length > 0 ? (
+             filtrelenmisIlanlar.map((ilan) => (
+                <IlanCard key={ilan.id} ilan={ilan} />
+             ))
+         ) : (
+             <p>Filtreye uygun ilan bulunamadı.</p>
+         )}
       </div>
     </div>
   );
 };
 
+
+// --- Ana Listings Bileşeni ---
 const Listings = () => {
   return (
     <>

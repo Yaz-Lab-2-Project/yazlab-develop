@@ -1,150 +1,75 @@
 import React, { useState, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
+// useNavigate artık burada gerekmeyebilir, çünkü yetkisiz erişimi ProtectedRoute hallediyor.
+// import { useNavigate } from "react-router-dom";
+import UserNavbar from "../../components/navbars/UserNavbar.jsx";
+import { useAuth } from "../../context/AuthContext"; // AuthContext'i import et
 
-import UserNavbar from "../../components/navbars/UserNavbar.jsx"; // UserNavbar bileşenini import edin
-
-// SABİT VERİLER
-const ilanlar = [
-  {
-    id: "9f1b6a7c-1a2b-4c3d-9e8f-000000000001",
-    kadro_tipi: "Doktor Öğr. Üyesi",
-    baslangic_tarihi: "2025-04-01",
-    bitis_tarihi: "2025-04-15",
-    aciklama: "2024-2025 Bahar dönemi için Doktor Öğretim Üyesi alımı yapılacaktır. Başvuru kriterlerini dikkatlice inceleyiniz.",
-    created_by: "1a2b3c4d-6666-ffff-gggg-000000000006"
-  },
-  {
-    id: "2c3d4e5f-2b3c-4d5e-9f0a-000000000002",
-    kadro_tipi: "Doçent",
-    baslangic_tarihi: "2025-04-10",
-    bitis_tarihi: "2025-04-25",
-    aciklama: "Mühendislik Fakültesi için Doçent kadrosuna başvurular açılmıştır. Gerekli belgeleri sisteme yüklemeyi unutmayınız.",
-    created_by: "1a2b3c4d-7777-gggg-hhhh-000000000007"
-  },
-  {
-    id: "3e4f5a6b-3c4d-5e6f-af0b-000000000003",
-    kadro_tipi: "Profesör",
-    baslangic_tarihi: "2025-04-20",
-    bitis_tarihi: "2025-05-05",
-    aciklama: "Fen Edebiyat Fakültesi'ne Profesör kadrosu için başvurular başlamıştır. Lütfen atama yönergesine uygun belgeleri yükleyiniz.",
-    created_by: "1a2b3c4d-6666-ffff-gggg-000000000006"
-  }
-];
-
-const duyurular = [
-  {
-    id: 1,
-    baslik: "Proje Teslim Tarihi",
-    icerik: "Projenizi 20 Nisan 2025 saat 17.00’ye kadar GitHub’a yüklemelisiniz.",
-    hedef_rol: "Tümü",
-    olusturma_tarihi: "2025-03-27T09:00:00",
-    gecerlilik_bitis: "2025-04-20T17:00:00",
-    onem_durumu: true
-  },
-  {
-    id: 2,
-    baslik: "Jüri Değerlendirme Başladı",
-    icerik: "Atandığınız adaylar için değerlendirme raporlarını yüklemeyi unutmayın.",
-    hedef_rol: "Jüri Üyesi",
-    olusturma_tarihi: "2025-04-21T10:00:00",
-    gecerlilik_bitis: "2025-04-30T23:59:59",
-    onem_durumu: false
-  },
-  {
-    id: 3,
-    baslik: "Sistem Güncellemesi",
-    icerik: "28 Mart’ta sistem bakımda olacak, giriş yapılamayacak.",
-    hedef_rol: "Tümü",
-    olusturma_tarihi: "2025-03-26T14:30:00",
-    gecerlilik_bitis: "2025-03-29T00:00:00",
-    onem_durumu: true
-  }
-];
-
-const basvurular = [
-  {
-    id: 1,
-    aday_id: "1a2b3c4d-1111-aaaa-bbbb-000000000001",
-    ilan_id: 501,
-    basvuru_tarihi: "2025-04-03T14:25:00Z",
-    durum: "Beklemede",
-    pdf_url: "https://akademikportal.edu/pdf/basvuru1.pdf"
-  },
-  {
-    id: 2,
-    aday_id: "1a2b3c4d-1111-aaaa-bbbb-000000000001",
-    ilan_id: 503,
-    basvuru_tarihi: "2025-04-10T09:45:00Z",
-    durum: "Onaylandı",
-    pdf_url: "https://akademikportal.edu/pdf/basvuru2.pdf"
-  },
-  {
-    id: 3,
-    aday_id: 101,
-    ilan_id: 504,
-    basvuru_tarihi: "2025-04-15T11:30:00Z",
-    durum: "Reddedildi",
-    pdf_url: "https://akademikportal.edu/pdf/basvuru3.pdf"
-  },
-  {
-    id: 4,
-    aday_id: 101,
-    ilan_id: 505,
-    basvuru_tarihi: "2025-04-20T16:10:00Z",
-    durum: "Beklemede",
-    pdf_url: "https://akademikportal.edu/pdf/basvuru4.pdf"
-  }
-];
-
-const predefinedUsers = [
-  {
-    id: "1a2b3c4d-1111-aaaa-bbbb-000000000001",
-    ad: "Ali",
-    soyad: "Yılmaz",
-    rol: "user"
-  },
-  // Diğer kullanıcılar (gerekirse buraya eklenebilir)
-];
+// SABİT VERİLERİ SİLİN (ilanlar, duyurular, basvurular, predefinedUsers)
 
 const UserDashboard = () => {
   const [currentDate, setCurrentDate] = useState(new Date());
-  const [user, setUser] = useState(null);
+  const { user } = useAuth(); // Kullanıcı bilgisini Context'ten alıyoruz
   const [announcements, setAnnouncements] = useState([]);
   const [latestAnnouncements, setLatestAnnouncements] = useState([]);
-  const navigate = useNavigate();
+  const [applications, setApplications] = useState([]); // Başvurular için state
+  const [loading, setLoading] = useState(true); // Veri yükleme durumu
+  const [error, setError] = useState(null); // Hata durumu
+  // const navigate = useNavigate(); // Artık burada navigate'e gerek yok
 
   useEffect(() => {
-    const role = localStorage.getItem("role");
-    const userId = localStorage.getItem("userId");
+    // localStorage kontrolünü ve navigate('/login') çağrısını kaldırın.
+    // Bu kontrolü ProtectedRoute yapmalı.
 
-    if (!role || role !== "user") {
-      navigate("/login");
-      return;
-    }
+    // Verileri API'den çek
+    const fetchData = async () => {
+      setLoading(true);
+      setError(null);
+      try {
+        // Birden fazla isteği aynı anda gönderelim
+        const [announcementsRes, listingsRes, applicationsRes] = await Promise.all([
+          // Duyuruları (Bildirimleri) çek - backend'in filtreleme yapması gerekebilir
+          fetch('http://localhost:8000/api/bildirimler/', { credentials: 'include' }),
+          // Aktif ilanları çek - backend'in filtreleme yapması gerekebilir
+          fetch('http://localhost:8000/api/ilanlar/?aktif=true', { credentials: 'include' }),
+           // Kullanıcının başvurularını çek - backend'in kullanıcıya göre filtrelemesi GEREKİR
+           // Örneğin: /api/basvurular/?my_applications=true gibi bir filtre olabilir backend'de
+          fetch('http://localhost:8000/api/basvurular/', { credentials: 'include' })
+        ]);
 
-    // Kullanıcıyı mock veriden bul
-    const foundUser = predefinedUsers.find((u) => u.id === userId);
-    setUser(foundUser);
+        // Yanıtları kontrol et
+        if (!announcementsRes.ok) throw new Error(`Duyurular alınamadı: ${announcementsRes.statusText}`);
+        if (!listingsRes.ok) throw new Error(`İlanlar alınamadı: ${listingsRes.statusText}`);
+        if (!applicationsRes.ok) throw new Error(`Başvurular alınamadı: ${applicationsRes.statusText}`);
 
-    // Duyuruları filtrele
-    const genelDuyurular = duyurular.filter((d) => d.hedef_rol === "Tümü");
-    setAnnouncements(genelDuyurular);
+        // Verileri JSON'a çevir
+        const announcementsData = await announcementsRes.json();
+        const listingsData = await listingsRes.json();
+        const applicationsData = await applicationsRes.json();
 
-    // En güncel ilanlar
-    const aktifIlanlar = ilanlar.filter(
-      (i) => new Date(i.bitis_tarihi) >= new Date()
-    );
-    setLatestAnnouncements(aktifIlanlar);
-  }, [navigate]);
+        // State'leri güncelle
+        // Backend'den gelen yanıta göre filtreleme/ayarlama gerekebilir
+        setAnnouncements(announcementsData.results || announcementsData); // DRF pagination varsa .results
+        setLatestAnnouncements(listingsData.results || listingsData);
+        setApplications(applicationsData.results || applicationsData);
 
+      } catch (err) {
+        console.error("Dashboard verileri çekilirken hata:", err);
+        setError(err.message);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchData();
+  }, []); // Sadece component mount olduğunda çalışır
+
+  // Takvim fonksiyonları (aynı kalabilir)
   const daysInMonth = (year, month) => new Date(year, month + 1, 0).getDate();
-
   const handlePrevMonth = () => {
     setCurrentDate(
       new Date(currentDate.getFullYear(), currentDate.getMonth() - 1, 1)
     );
   };
-
   const handleNextMonth = () => {
     setCurrentDate(
       new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 1)
@@ -157,49 +82,63 @@ const UserDashboard = () => {
     const firstDay = new Date(year, month, 1).getDay();
     const days = daysInMonth(year, month);
 
-    // Sadece predefinedUsers içerisindeki kullanıcıların başvurularını filtrele
-    const validUserIds = predefinedUsers.map((user) => user.id);
-    const filteredApplications = basvurular.filter((b) =>
-      validUserIds.includes(b.aday_id)
-    );
-
     const calendar = [];
-    for (let i = 0; i < firstDay; i++) {
+    // Takvimin başına boş günler ekle (Pazartesi'den başlaması için ayar gerekebilir)
+    let startDay = firstDay === 0 ? 6 : firstDay -1; // Haftayı Pazartesi'den başlat
+    for (let i = 0; i < startDay; i++) {
       calendar.push(<div key={`empty-${i}`} className="calendar-day empty"></div>);
     }
 
     for (let day = 1; day <= days; day++) {
-      const currentDateStr = new Date(year, month, day).toISOString().split("T")[0];
-      const dailyApplications = filteredApplications.filter(
-        (b) => b.basvuru_tarihi.split("T")[0] === currentDateStr
+      const dayDate = new Date(year, month, day);
+      const currentDateStr = dayDate.toISOString().split("T")[0];
+
+      // API'den gelen başvuruları filtrele (backend 'basvuru_tarihi' formatına dikkat!)
+      const dailyApplications = applications.filter(
+        (b) => b.basvuru_tarihi && b.basvuru_tarihi.startsWith(currentDateStr)
       );
 
       calendar.push(
         <div key={day} className="calendar-day">
           <div className="day-number">{day}</div>
           {dailyApplications.map((app) => (
-            <div key={app.id} className={`application ${app.durum.toLowerCase()}`}>
-              <a href={app.pdf_url} target="_blank" rel="noopener noreferrer">
-                {app.durum}
-              </a>
+            <div key={app.id} className={`application ${app.durum ? app.durum.toLowerCase() : 'bilinmiyor'}`}>
+               {/* Backend'den PDF URL gelmiyorsa linki kaldırın veya düzenleyin */}
+               {app.durum || 'Detay'}
+               {/* Eğer PDF URL varsa:
+               <a href={app.pdf_url} target="_blank" rel="noopener noreferrer">
+                 {app.durum}
+               </a>
+               */}
             </div>
           ))}
         </div>
       );
     }
-
     return calendar;
   };
 
+
+  // Yükleme veya Hata Durumlarını Göster
+  if (loading) {
+      return <div><UserNavbar /> <div className="container">Yükleniyor...</div></div>;
+  }
+
+  if (error) {
+       return <div><UserNavbar /> <div className="container">Hata: {error}</div></div>;
+  }
+
+  // Veri başarıyla yüklendiyse render et
   return (
     <div className="dashboard">
       <UserNavbar /> {/* Navbar */}
+      {/* user bilgisini localStorage yerine Context'ten alıyoruz */}
       {user && (
-        <div className="user-welcome">
-          <h2>Hoş geldiniz, {user.ad} {user.soyad}</h2>
+        <div className="user-welcome" style={{ padding: '0 20px' }}> {/* Padding ekledim */}
+          <h2>Hoş geldiniz, {user.first_name} {user.last_name}</h2>
         </div>
       )}
-      <div className="container">
+      <div className="container" style={{ padding: '0 20px 20px 20px' }}> {/* Padding ekledim */}
         <div className="calendar-container">
           <div className="calendar-header">
             <button onClick={handlePrevMonth}>&lt;</button>
@@ -220,27 +159,32 @@ const UserDashboard = () => {
         </div>
         <div className="sidebar">
           <div className="announcements">
-            <h3>Duyurular</h3>
+            <h3>Duyurular (Bildirimler)</h3> {/* Başlığı güncelledim */}
             <ul>
-              {announcements.map((d) => (
+              {announcements.length > 0 ? announcements.map((d) => (
                 <li key={d.id}>
-                  <strong>{d.baslik}:</strong> {d.icerik}
+                  {/* Backend'den gelen bildirim modeline göre alan adlarını güncelleyin */}
+                  <strong>{d.baslik}:</strong> {d.mesaj}
                 </li>
-              ))}
+              )) : <li>Gösterilecek duyuru yok.</li>}
             </ul>
           </div>
           <div className="latest-announcements">
-            <h3>Anlık İlanlar</h3>
+            <h3>Aktif İlanlar</h3> {/* Başlığı güncelledim */}
             <ul>
-              {latestAnnouncements.map((i) => (
+               {/* Backend'den gelen ilan modeline göre alan adlarını güncelleyin */}
+              {latestAnnouncements.length > 0 ? latestAnnouncements.map((i) => (
                 <li key={i.id}>
-                  <strong>{i.kadro_tipi}:</strong> {i.aciklama}
+                   {/* İlanın kadro tipi yerine başlığını göstermek daha anlamlı olabilir */}
+                  <strong>{i.baslik}:</strong> {i.kadro_tipi_ad || i.kadro_tipi} - Bitiş: {new Date(i.bitis_tarihi).toLocaleDateString('tr-TR')}
+                  {/* Belki ilanın detayına link verilebilir */}
                 </li>
-              ))}
+              )) : <li>Aktif ilan bulunmuyor.</li>}
             </ul>
           </div>
         </div>
       </div>
+      {/* CSS Kodları (Değişiklik Yok) */}
       <style>
         {`
           /* CSS kodları buraya eklendi */

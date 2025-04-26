@@ -1,33 +1,10 @@
-import React from "react";
+import React, { useState, useEffect } from "react"; // useEffect eklendi
 import {
-  BarChart,
-  Bar,
-  XAxis,
-  YAxis,
-  Tooltip,
-  CartesianGrid,
-  ResponsiveContainer,
-  Legend,
-  Cell
+  BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid, ResponsiveContainer, Legend, Cell
 } from "recharts";
-import AdminNavbar from "../../components/navbars/AdminNavbar.jsx"; // AdminNavbar bileşenini import ettik
+import AdminNavbar from "../../components/navbars/AdminNavbar.jsx";
 
-const dashboardData = {
-  totalPostings: 35,
-  activePostings: 22,
-  ongoingApplications: 18,
-  mostApplied: "Bilgisayar Müh. Doçentliği"
-};
-
-const departmentApplications = [
-  { name: "Bilgisayar Müh.", value: 10 },
-  { name: "Elektrik-Elektronik Müh.", value: 6 },
-  { name: "Makine Müh.", value: 4 },
-  { name: "İnşaat Müh.", value: 3 },
-  { name: "Endüstri Müh.", value: 2 }
-];
-
-const COLORS = ["#009944", "#ffc107", "#28a745", "#dc3545", "#007c39"];
+const COLORS = ["#009944", "#ffc107", "#28a745", "#dc3545", "#007c39", "#6f42c1"]; // Gerekirse daha fazla renk
 
 const styles = {
   body: {
@@ -117,36 +94,95 @@ const Card = ({ title, value, style }) => {
 };
 
 const AdminDashboard = () => {
+  // State tanımlamaları
+  const [dashboardStats, setDashboardStats] = useState({
+      stats: {},
+      departmentApplications: []
+  });
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+
+  // Veri çekme
+  useEffect(() => {
+    setLoading(true);
+    setError(null);
+    fetch('http://localhost:8000/api/admin-stats/', { credentials: 'include' }) // Backend endpoint'iniz
+      .then(res => {
+        if (!res.ok) {
+          throw new Error(`Admin dashboard verileri alınamadı (${res.status})`);
+        }
+        return res.json();
+      })
+      .then(data => {
+        console.log("Gelen Admin Dashboard Verisi:", data);
+        // Gelen verinin beklenen yapıda olduğunu kontrol edin
+        setDashboardStats({
+            stats: data.stats || {},
+            departmentApplications: data.departmentApplications || []
+        });
+      })
+      .catch(err => {
+        console.error("Admin dashboard verisi çekilirken hata:", err);
+        setError(err.message);
+      })
+      .finally(() => {
+        setLoading(false);
+      });
+  }, []); // Sadece component mount olduğunda çalışır
+
+
+  // --- Render ---
+
+  if (loading) {
+    return ( <><AdminNavbar /><div style={styles.body}><p>Admin paneli verileri yükleniyor...</p></div></> );
+  }
+
+  if (error) {
+    return ( <><AdminNavbar /><div style={styles.body}><h1 style={styles.headerTitle}>Admin Dashboard</h1><p style={{color:'red', textAlign:'center'}}>Hata: {error}</p></div></> );
+  }
+
+  // Veri varsa render et
   return (
     <>
-      <AdminNavbar /> {/* Navbar bileşeni */}
+      <AdminNavbar />
       <div style={styles.body}>
         <header style={styles.header}>
           <h1 style={styles.headerTitle}>Admin Dashboard</h1>
         </header>
         <div style={styles.container}>
-          <Card title="Toplam İlan Sayısı" value={dashboardData.totalPostings} />
-          <Card title="Aktif İlan Sayısı" value={dashboardData.activePostings} style={styles.green} />
-          <Card title="Devam Eden Başvuru Süreçleri" value={dashboardData.ongoingApplications} style={styles.yellow} />
-          <Card title="En Çok Başvuru Yapılan İlan" value={dashboardData.mostApplied} style={styles.red} />
+          {/* Kartları API'den gelen veriyle doldur */}
+          <Card title="Toplam İlan Sayısı" value={dashboardStats.stats?.totalPostings ?? '-'} />
+          <Card title="Aktif İlan Sayısı" value={dashboardStats.stats?.activePostings ?? '-'} style={styles.green} />
+          <Card title="Devam Eden Başvuru Süreçleri" value={dashboardStats.stats?.ongoingApplications ?? '-'} style={styles.yellow} />
+          {/* En çok başvuru alan ilan için backend'den gelen veriyi kullanın */}
+          {/* Eğer obje dönüyorsa: dashboardStats.stats?.mostApplied?.baslik ?? '-' */}
+          <Card title="En Çok Başvuru Yapılan İlan" value={dashboardStats.stats?.mostApplied ?? '-'} style={styles.red} />
         </div>
 
+        {/* Grafik Alanı */}
         <div style={styles.chartContainer}>
           <h2 style={styles.chartTitle}>Başvuru Yapılan Bölümlerin Dağılımı</h2>
-          <ResponsiveContainer width="100%" height={320}>
-            <BarChart data={departmentApplications} margin={{ top: 20, right: 30, left: 0, bottom: 10 }}>
-              <CartesianGrid strokeDasharray="3 3" />
-              <XAxis dataKey="name" tick={{ fontSize: 12 }} />
-              <YAxis allowDecimals={false} />
-              <Tooltip />
-              <Legend />
-              <Bar dataKey="value" fill="#009944">
-                {departmentApplications.map((entry, index) => (
-                  <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                ))}
-              </Bar>
-            </BarChart>
-          </ResponsiveContainer>
+           {dashboardStats.departmentApplications?.length > 0 ? (
+               <ResponsiveContainer width="100%" height={320}>
+                 {/* Grafiği API'den gelen veriyle doldur */}
+                 <BarChart data={dashboardStats.departmentApplications} margin={{ top: 20, right: 30, left: 0, bottom: 10 }}>
+                   <CartesianGrid strokeDasharray="3 3" />
+                   {/* dataKey'lerin API yanıtındaki alan adlarıyla eşleştiğinden emin olun */}
+                   <XAxis dataKey="name" tick={{ fontSize: 12 }} />
+                   <YAxis allowDecimals={false} />
+                   <Tooltip />
+                   <Legend />
+                   <Bar dataKey="value" fill="#009944">
+                     {/* Renkleri dinamik ata */}
+                     {(dashboardStats.departmentApplications || []).map((entry, index) => (
+                       <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                     ))}
+                   </Bar>
+                 </BarChart>
+               </ResponsiveContainer>
+           ) : (
+               <p style={{textAlign:'center', color:'#6c757d'}}>Grafik için bölüm verisi bulunamadı.</p>
+           )}
         </div>
       </div>
     </>

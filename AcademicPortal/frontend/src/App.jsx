@@ -1,35 +1,32 @@
 // src/App.jsx
 
-import React, { useState, useEffect } from "react";
+import React, { useEffect } from "react"; // useEffect eklendi (AuthHandler için)
 import {
   BrowserRouter as Router,
   Routes,
   Route,
-  Navigate
+  Navigate,
+  useNavigate,   // useNavigate eklendi (AuthHandler için)
+  useLocation    // useLocation eklendi (AuthHandler için)
 } from "react-router-dom";
-import Login from "./pages/auth/Login";
+import { useAuth } from "./context/AuthContext"; // useAuth import edildi
 
-// User Pages
+// Sayfa Bileşenleri
+import Login from "./pages/auth/Login";
 import Listings from "./pages/user/Listings";
 import Apply from "./pages/user/Apply";
 import MyApplications from "./pages/user/MyApplications";
 import Profile from "./pages/user/Profile";
 import UserDashboard from "./pages/user/Dashboard";
-
-// Admin Pages
 import AdminAdvertisements from "./pages/admin/Advertisements";
 import AdminApplications from "./pages/admin/Applications";
 import AdminUsers from "./pages/admin/Users";
 import AdminDashboard from "./pages/admin/Dashboard";
-
-// Jury Pages
 import UserApplication from "./pages/jury/User-Application";
 import Reviews from "./pages/jury/Reviews";
 import Applications from "./pages/jury/Applications";
 import Rapor from "./pages/jury/Rapor";
 import JuryDashboard from "./pages/jury/Dashboard";
-
-// Manager Pages
 import ManagerDashboard from "./pages/manager/Dashboard";
 import İlan from "./pages/manager/İlan";
 import JuriAtama from "./pages/manager/JuriAtama";
@@ -37,215 +34,114 @@ import Basvurular from "./pages/manager/Basvurular";
 import CriteriaPage from "./pages/manager/CriteriaPage";
 import ManagerProfile from "./pages/manager/Profile";
 
+// --- ProtectedRoute (Context Kullanan Versiyon) ---
+// Bu bileşeni ayrı bir dosyaya (örn: src/components/ProtectedRoute.jsx) taşımanız önerilir.
 function ProtectedRoute({ children, allowedRole }) {
-  const [status, setStatus] = useState({ loading: true, role: null });
+  const { isAuthenticated, user, isLoading } = useAuth(); // Sadece context'i oku
 
-  useEffect(() => {
-    fetch("/api/current-user/", {
-      credentials: "include",
-      headers: { "Content-Type": "application/json" }
-    })
-      .then(res => {
-        if (!res.ok) throw new Error();
-        return res.json();
-      })
-      .then(user => {
-        // Django tarafında `user_type` alanı gelir: "ADAY", "ADMIN", "YONETICI", "JURI"
-        setStatus({ loading: false, role: user.user_type.toLowerCase() });
-      })
-      .catch(() => {
-        setStatus({ loading: false, role: null });
-      });
-  }, []);
+  // console.log("ProtectedRoute Check:", { isLoading, isAuthenticated, user, allowedRole });
 
-  if (status.loading) {
-    return <div>Yükleniyor...</div>;
+  if (isLoading) {
+    // console.log("ProtectedRoute: Rendering loading state from context.");
+    return <div>Oturum kontrol ediliyor...</div>;
   }
 
-  if (!status.role || status.role !== allowedRole) {
+  if (!isAuthenticated) {
+    // console.log("ProtectedRoute: Not authenticated, redirecting to login.");
     return <Navigate to="/login" replace />;
   }
 
+  const userRole = user?.user_type ? user.user_type.toLowerCase() : null;
+  if (userRole !== allowedRole) {
+    // console.log(`ProtectedRoute: Role mismatch (User: ${userRole}, Allowed: ${allowedRole}), redirecting.`);
+    return <Navigate to="/login" replace />; // Veya Yetkisiz Erişim sayfasına
+  }
+
+  // console.log("ProtectedRoute: Access granted, rendering children.");
   return children;
 }
 
+
+// --- Auth Durumunu Dinleyip Yönlendiren Bileşen ---
+function AuthHandler() {
+    const { isAuthenticated, user, isLoading } = useAuth();
+    const navigate = useNavigate();
+    const location = useLocation();
+
+    useEffect(() => {
+        if (isLoading) return; // Yükleme bitene kadar bekle
+
+        if (isAuthenticated && user) {
+            // Kullanıcı giriş yapmışsa
+            const onLoginPage = location.pathname === '/login';
+            const userRole = user.user_type ? user.user_type.toLowerCase() : null;
+            let targetPath = '/'; // Default fallback
+
+            if (userRole === "admin") targetPath = "/admin";
+            else if (userRole === "aday") targetPath = "/user";
+            else if (userRole === "yonetici") targetPath = "/manager";
+            else if (userRole === "juri") targetPath = "/jury";
+
+             // Sadece login sayfasındaysak veya henüz bir dashboard'da değilsek yönlendir
+             const dashboardPaths = ['/user', '/admin', '/manager', '/jury'];
+             const isOnDashboard = dashboardPaths.some(path => location.pathname.startsWith(path));
+
+             if (targetPath !== '/' && (onLoginPage || !isOnDashboard)) {
+                 console.log(`AuthHandler: User authenticated (Role: ${userRole}). Navigating to ${targetPath}`);
+                 navigate(targetPath, { replace: true });
+             }
+        } else {
+             // Kullanıcı giriş yapmamışsa ve korumalı olmayan bir sayfada değilse (örn: /login değilse) login'e yönlendir
+             // Bu kısım isteğe bağlı, belki ProtectedRoute yeterlidir.
+            // if (location.pathname !== '/login') {
+            //     console.log("AuthHandler: User not authenticated. Navigating to /login");
+            //     navigate('/login', { replace: true });
+            // }
+        }
+
+    }, [isAuthenticated, user, isLoading, navigate, location]);
+
+    return null; // Bu bileşen bir şey render etmez
+}
+
+
+// --- Ana App Fonksiyonu ---
 export default function App() {
   return (
     <Router>
-      <Routes>
-        {/* Redirect root to login or user dashboard */}
+       {/* AuthHandler, Router içinde ama Routes dışında olmalı */}
+       <AuthHandler />
+       <Routes>
         <Route path="/" element={<Navigate to="/login" replace />} />
-
-        {/* Auth */}
         <Route path="/login" element={<Login />} />
 
-        {/* User */}
-        <Route
-          path="/user"
-          element={
-            <ProtectedRoute allowedRole="aday">
-              <UserDashboard />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/listing"
-          element={
-            <ProtectedRoute allowedRole="aday">
-              <Listings />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/apply"
-          element={
-            <ProtectedRoute allowedRole="aday">
-              <Apply />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/basvurularim"
-          element={
-            <ProtectedRoute allowedRole="aday">
-              <MyApplications />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/profile"
-          element={
-            <ProtectedRoute allowedRole="aday">
-              <Profile />
-            </ProtectedRoute>
-          }
-        />
+        {/* User Routes */}
+        <Route path="/user" element={<ProtectedRoute allowedRole="aday"><UserDashboard /></ProtectedRoute>} />
+        <Route path="/listing" element={<ProtectedRoute allowedRole="aday"><Listings /></ProtectedRoute>} />
+        <Route path="/apply/:ilanId" element={<ProtectedRoute allowedRole="aday"><Apply /></ProtectedRoute>} />
+        <Route path="/basvurularim" element={<ProtectedRoute allowedRole="aday"><MyApplications /></ProtectedRoute>} />
+        <Route path="/profile" element={<ProtectedRoute allowedRole="aday"><Profile /></ProtectedRoute>} />
 
-        {/* Admin */}
-        <Route
-          path="/admin"
-          element={
-            <ProtectedRoute allowedRole="admin">
-              <AdminDashboard />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/admin-applications"
-          element={
-            <ProtectedRoute allowedRole="admin">
-              <AdminApplications />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/admin-advertisements"
-          element={
-            <ProtectedRoute allowedRole="admin">
-              <AdminAdvertisements />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/admin-users"
-          element={
-            <ProtectedRoute allowedRole="admin">
-              <AdminUsers />
-            </ProtectedRoute>
-          }
-        />
+        {/* Admin Routes */}
+        <Route path="/admin" element={<ProtectedRoute allowedRole="admin"><AdminDashboard /></ProtectedRoute>} />
+        <Route path="/admin-applications" element={<ProtectedRoute allowedRole="admin"><AdminApplications /></ProtectedRoute>} />
+        <Route path="/admin-advertisements" element={<ProtectedRoute allowedRole="admin"><AdminAdvertisements /></ProtectedRoute>} />
+        <Route path="/admin-users" element={<ProtectedRoute allowedRole="admin"><AdminUsers /></ProtectedRoute>} />
 
-        {/* Manager */}
-        <Route
-          path="/manager"
-          element={
-            <ProtectedRoute allowedRole="yonetici">
-              <ManagerDashboard />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/manager-ilan"
-          element={
-            <ProtectedRoute allowedRole="yonetici">
-              <İlan />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/manager-juri-atama"
-          element={
-            <ProtectedRoute allowedRole="yonetici">
-              <JuriAtama />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/manager-basvurular"
-          element={
-            <ProtectedRoute allowedRole="yonetici">
-              <Basvurular />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/manager-criteriapage"
-          element={
-            <ProtectedRoute allowedRole="yonetici">
-              <CriteriaPage />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/manager-profile"
-          element={
-            <ProtectedRoute allowedRole="yonetici">
-              <ManagerProfile />
-            </ProtectedRoute>
-          }
-        />
+        {/* Manager Routes */}
+        <Route path="/manager" element={<ProtectedRoute allowedRole="yonetici"><ManagerDashboard /></ProtectedRoute>} />
+        <Route path="/manager-ilan" element={<ProtectedRoute allowedRole="yonetici"><İlan /></ProtectedRoute>} />
+        <Route path="/manager-juri-atama" element={<ProtectedRoute allowedRole="yonetici"><JuriAtama /></ProtectedRoute>} />
+        <Route path="/manager-basvurular" element={<ProtectedRoute allowedRole="yonetici"><Basvurular /></ProtectedRoute>} />
+        <Route path="/manager-criteriapage" element={<ProtectedRoute allowedRole="yonetici"><CriteriaPage /></ProtectedRoute>} />
+        <Route path="/manager-profile" element={<ProtectedRoute allowedRole="yonetici"><ManagerProfile /></ProtectedRoute>} />
 
-        {/* Jury */}
-        <Route
-          path="/jury"
-          element={
-            <ProtectedRoute allowedRole="juri">
-              <JuryDashboard />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/jury-rapor"
-          element={
-            <ProtectedRoute allowedRole="juri">
-              <Rapor />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/jury-reviews"
-          element={
-            <ProtectedRoute allowedRole="juri">
-              <Reviews />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/jury-applications"
-          element={
-            <ProtectedRoute allowedRole="juri">
-              <Applications />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/jury-userapplication"
-          element={
-            <ProtectedRoute allowedRole="juri">
-              <UserApplication />
-            </ProtectedRoute>
-          }
-        />
+        {/* Jury Routes */}
+        <Route path="/jury" element={<ProtectedRoute allowedRole="juri"><JuryDashboard /></ProtectedRoute>} />
+        <Route path="/jury-rapor" element={<ProtectedRoute allowedRole="juri"><Rapor /></ProtectedRoute>} />
+        <Route path="/jury-reviews" element={<ProtectedRoute allowedRole="juri"><Reviews /></ProtectedRoute>} />
+        <Route path="/jury-applications" element={<ProtectedRoute allowedRole="juri"><Applications /></ProtectedRoute>} />
+        <Route path="/jury-userapplication" element={<ProtectedRoute allowedRole="juri"><UserApplication /></ProtectedRoute>} />
 
         {/* Catch-all */}
         <Route path="*" element={<Navigate to="/login" replace />} />

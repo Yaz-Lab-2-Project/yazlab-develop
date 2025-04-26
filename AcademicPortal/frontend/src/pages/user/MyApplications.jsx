@@ -1,126 +1,135 @@
-import React, { useState, useEffect, useRef } from "react";
-import { FaFileAlt } from "react-icons/fa";
+import React, { useState, useEffect } from "react";
+// useNavigate burada doğrudan kullanılmıyor, kaldırılabilir
+// import { useNavigate } from "react-router-dom";
 import UserNavbar from "../../components/navbars/UserNavbar";
+import { FaFileAlt } from "react-icons/fa";
+// AuthContext'i kullanmıyoruz çünkü backend zaten kullanıcıya göre filtreliyor olmalı
+// import { useAuth } from "../../context/AuthContext";
 
-const academicAnnouncements = [
-  {
-    id: 1,
-    title: "Bilgisayar Mühendisliği Bölümü - Dr. Öğr. Üyesi Kadrosu",
-    position: "Dr. Öğr. Üyesi",
-    faculty: "Mühendislik Fakültesi",
-    department: "Bilgisayar Mühendisliği",
-    startDate: "2025-04-01",
-    endDate: "2025-04-20"
-  },
-  {
-    id: 2,
-    title: "İktisat Bölümü - Doçent Kadrosu",
-    position: "Doçent",
-    faculty: "İktisadi ve İdari Bilimler Fakültesi",
-    department: "İktisat",
-    startDate: "2025-04-05",
-    endDate: "2025-04-25"
-  },
-  {
-    id: 3,
-    title: "Elektrik-Elektronik Mühendisliği - Profesör Kadrosu",
-    position: "Profesör",
-    faculty: "Mühendislik Fakültesi",
-    department: "Elektrik-Elektronik Mühendisliği",
-    startDate: "2025-03-30",
-    endDate: "2025-04-20"
-  },
-  {
-    id: 4,
-    title: "Hukuk Fakültesi - Dr. Öğr. Üyesi Kadrosu (Özel Alan)",
-    position: "Dr. Öğr. Üyesi",
-    faculty: "Hukuk Fakültesi",
-    department: "Kamu Hukuku",
-    startDate: "2025-04-02",
-    endDate: "2025-04-18"
-  }
-];
-
-const myApplications = [
-  {
-    applicationId: 101,
-    userId: 1,
-    announcementId: 1,
-    status: "Beklemede",
-    appliedDate: "2025-04-02",
-    documents: ["Özgeçmiş.pdf", "Doktora_Belgesi.pdf", "A1_Yayin.pdf", "Baslica_Yazar_Kaniti.pdf"]
-  },
-  {
-    applicationId: 102,
-    userId: 1,
-    announcementId: 2,
-    status: "Onaylandı",
-    appliedDate: "2025-04-06",
-    documents: ["Docentlik_Belgesi.pdf", "Yayinlar.pdf", "Konferans_Belgesi.pdf", "Atif_Belgeleri.pdf"]
-  },
-  {
-    applicationId: 103,
-    userId: 1,
-    announcementId: 3,
-    status: "Reddedildi",
-    appliedDate: "2025-04-01",
-    documents: ["Prof_Dilekce.pdf", "10_Yayin.pdf", "Proje_Belgesi.pdf", "Baslica_Yazar.pdf"]
-  },
-  {
-    applicationId: 104,
-    userId: 1,
-    announcementId: 4,
-    status: "Beklemede",
-    appliedDate: "2025-04-03",
-    documents: ["Alan_Disi_Yayin_Kaniti.pdf", "A1_Yayin.pdf", "Katilim_Belgesi.pdf"]
-  },
-  {
-    applicationId: 105,
-    userId: 1,
-    announcementId: 1,
-    status: "Onaylandı",
-    appliedDate: "2025-04-05",
-    documents: ["YuksekLisans_Belgesi.pdf", "IndeksliYayin.pdf", "Baslica_Yazar_Kaniti.pdf"]
-  }
-];
+// Sabit verileri kaldırıyoruz
+// const academicAnnouncements = [ ... ];
+// const myApplications = [ ... ];
 
 const statusColors = {
   Beklemede: "#ffc107", // Sarı
   Onaylandı: "#28a745", // Yeşil
-  Reddedildi: "#dc3545" // Kırmızı
+  Reddedildi: "#dc3545", // Kırmızı
+  // Backend'den gelebilecek diğer durumlar için renkler eklenebilir
+  bilinmiyor: "#6c757d", // Gri
 };
 
 export default function MyApplications() {
-  const [openId, setOpenId] = useState(null);
+  const [applications, setApplications] = useState([]); // API'den gelen başvurular
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [openId, setOpenId] = useState(null); // Hangi modalın açık olduğu
+
+  useEffect(() => {
+    setLoading(true);
+    setError(null);
+    // Backend'den GİRİŞ YAPMIŞ KULLANICIYA ait başvuruları çek
+    fetch('http://localhost:8000/api/basvurular/', { credentials: 'include' })
+      .then(res => {
+        if (!res.ok) {
+          throw new Error(`Başvurularım alınamadı (${res.status})`);
+        }
+        return res.json();
+      })
+      .then(data => {
+        console.log("Gelen Başvurular:", data); // Gelen veriyi kontrol et
+        // DRF pagination varsa data.results, yoksa doğrudan data
+        setApplications(data.results || data);
+      })
+      .catch(err => {
+        console.error("Başvuruları çekerken hata:", err);
+        setError(err.message);
+      })
+      .finally(() => {
+        setLoading(false);
+      });
+  }, []); // Sadece component mount olduğunda çalışır
 
   const toggleDialog = (id) => {
     setOpenId(prev => (prev === id ? null : id));
   };
 
+  // Tarih formatlama (isteğe bağlı)
+  const formatDate = (dateString) => {
+    if (!dateString) return "";
+    try {
+      // Zaman bilgisini de gösterebiliriz
+      return new Date(dateString).toLocaleString("tr-TR", {
+          year: 'numeric', month: 'long', day: 'numeric' //, hour: '2-digit', minute: '2-digit'
+      });
+    } catch (e) {
+      return dateString;
+    }
+  };
+
+
+  // --- Yükleme ve Hata Durumları ---
+  if (loading) {
+    return (
+      <>
+        <UserNavbar />
+        <div className="container"><p>Başvurularınız yükleniyor...</p></div>
+        {/* Stil etiketi burada da olabilir veya global CSS'e taşınabilir */}
+        <style>{` /* ... CSS kodları ... */ `}</style>
+      </>
+    );
+  }
+
+  if (error) {
+    return (
+      <>
+        <UserNavbar />
+        <div className="container">
+           <h1 className="title">Başvurularım</h1>
+           <p style={{color:'red'}}>Hata: {error}</p>
+        </div>
+        <style>{` /* ... CSS kodları ... */ `}</style>
+      </>
+    );
+  }
+
+  // --- Başvuruları Listeleme ---
   return (
     <>
       <UserNavbar />
       <div className="container">
         <h1 className="title">Başvurularım</h1>
         <div className="grid">
-          {myApplications.map(app => {
-            const announcement = academicAnnouncements.find(a => a.id === app.announcementId);
-            const isOpen = openId === app.applicationId;
+          {applications.length > 0 ? applications.map(app => {
+            // Başvuruyla ilişkili ilan verisine erişim (nested olduğunu varsayıyoruz)
+            // Backend Serializer'ınızın 'ilan' detayını döndürdüğünden emin olun.
+            const announcement = app.ilan; // API yanıtınızda ilan detayları 'ilan' anahtarı altında varsayılıyor
+            const isOpen = openId === app.id; // Başvurunun ID'si app.id varsayılıyor
+
+            // Durum için renk belirle, bilinmeyen durumlar için varsayılan renk
+            const statusColor = statusColors[app.durum] || statusColors.bilinmiyor;
 
             return (
               <div
-                key={app.applicationId}
+                key={app.id} // Başvurunun ID'si
                 className="card"
-                style={{ borderLeftColor: statusColors[app.status] }}
+                style={{ borderLeftColor: statusColor }}
               >
                 <div>
-                  <h2>{announcement?.position}</h2>
-                  <p className="text-gray">{announcement?.faculty}</p>
-                  <p className="text-gray">{announcement?.department}</p>
-                  <p className="text-gray-light">Başvuru Tarihleri: {announcement?.startDate} - {announcement?.endDate}</p>
-                  <p className="text-gray-light status">Durum: <span style={{ color: statusColors[app.status] }}>{app.status}</span></p>
+                  {/* İlan bilgilerini nested objeden al (alan adları serializer'a göre değişebilir) */}
+                  <h2>{announcement?.baslik || 'İlan Başlığı Yok'}</h2>
+                  <p className="text-gray">{announcement?.birim_ad || announcement?.birim?.ad || 'Birim Yok'}</p>
+                  <p className="text-gray">{announcement?.bolum_ad || announcement?.bolum?.ad || 'Bölüm Yok'}</p>
+                  <p className="text-gray-light">
+                      Başvuru Tarihleri: {formatDate(announcement?.baslangic_tarihi)} - {formatDate(announcement?.bitis_tarihi)}
+                  </p>
+                  <p className="text-gray-light">
+                      Başvurduğunuz Tarih: {formatDate(app.basvuru_tarihi)}
+                  </p>
+                  <p className="text-gray-light status">
+                      Durum: <span style={{ color: statusColor }}>{app.durum || 'Bilinmiyor'}</span>
+                  </p>
                 </div>
-                <button className="btn mt-4" onClick={() => toggleDialog(app.applicationId)}>Yüklediğim Belgeleri Gör</button>
+                <button className="btn mt-4" onClick={() => toggleDialog(app.id)}>Yüklediğim Belgeleri Gör</button>
 
                 {/* Modal */}
                 {isOpen && (
@@ -130,28 +139,33 @@ export default function MyApplications() {
                         <h2>Yüklenen Belgeler</h2>
                         <button
                           className="close-btn"
-                          onClick={() => setOpenId(null)} // Modalı kapatır
+                          onClick={() => setOpenId(null)}
                           aria-label="Close"
                         >
-                          &times; {/* Daha şık bir kapatma simgesi */}
+                          &times;
                         </button>
                       </div>
                       <ul className="document-list">
-                        {app.documents.map((doc, idx) => (
-                          <li key={idx}>
-                            <a href="#" download>
-                              <FaFileAlt style={{ marginRight: "6px", color: "#009944" }} />
-                              {doc}
-                            </a>
-                          </li>
-                        ))}
+                        {/*
+                          Backend'den gelen dosya URL'lerini burada listele.
+                          Varsayım: Başvuru objesi içinde *_url ile biten alanlar var.
+                          Backend Serializer'ınızın bu URL'leri sağladığından emin olun.
+                          (settings.py'da MEDIA_URL doğru ayarlanmalı)
+                        */}
+                        {app.ozgecmis_dosyasi ? <li><a href={app.ozgecmis_dosyasi} target="_blank" rel="noopener noreferrer"><FaFileAlt style={{ marginRight: "6px", color: "#009944" }} /> Özgeçmiş</a></li> : null}
+                        {app.diploma_belgeleri ? <li><a href={app.diploma_belgeleri} target="_blank" rel="noopener noreferrer"><FaFileAlt style={{ marginRight: "6px", color: "#009944" }} /> Diploma Belgeleri</a></li> : null}
+                        {app.yabanci_dil_belgesi ? <li><a href={app.yabanci_dil_belgesi} target="_blank" rel="noopener noreferrer"><FaFileAlt style={{ marginRight: "6px", color: "#009944" }} /> Yabancı Dil Belgesi</a></li> : null}
+                        {/* Başvuruya bağlı diğer potansiyel dosyalar (AdayFaaliyet vb.) burada listelenebilir */}
+                        {/* Eğer API'den sadece dosya adları değil, URL'ler geliyorsa 'href' kısmını ona göre ayarlayın */}
+                         {/* Eğer hiç belge URL'i yoksa bir mesaj gösterilebilir */}
+                         {!(app.ozgecmis_dosyasi || app.diploma_belgeleri || app.yabanci_dil_belgesi) && <li>Yüklü belge bulunamadı veya API yanıtında URL eksik.</li>}
                       </ul>
                     </div>
                   </div>
                 )}
               </div>
             );
-          })}
+          }) : <p>Henüz hiç başvurunuz bulunmuyor.</p>}
         </div>
         <style>{`
           .container {

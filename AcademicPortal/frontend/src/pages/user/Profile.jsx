@@ -1,35 +1,183 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { FaUserCircle } from "react-icons/fa";
 import UserNavbar from "../../components/navbars/UserNavbar";
+import { useAuth } from "../../context/AuthContext"; // AuthContext'i import et
+
+// CSRF token'ı almak için getCookie fonksiyonu
+function getCookie(name) {
+    let cookieValue = null;
+    if (document.cookie && document.cookie !== '') {
+        const cookies = document.cookie.split(';');
+        for (let i = 0; i < cookies.length; i++) {
+            const cookie = cookies[i].trim();
+            if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                break;
+            }
+        }
+    }
+    return cookieValue;
+}
+
 
 export default function UserProfile() {
-  const [form, setForm] = useState({
-    fullName: "Ali Veli",
-    email: "ali.veli@example.com",
-    phone: "05001112233",
-    password: "",
-    tckn: "12345678901",
-    institution: "Kocaeli Üniversitesi",
-    department: "Bilgisayar Mühendisliği",
-    academicTitle: "Dr. Öğr. Üyesi"
+  const { user, isLoading: authLoading, login: updateUserInContext } = useAuth(); // Context'ten kullanıcıyı ve login fonksiyonunu al (state güncellemek için)
+  const [formData, setFormData] = useState({
+    first_name: "",
+    last_name: "",
+    email: "",
+    telefon: "",
+    TC_KIMLIK: "", // Backend field adı
+    akademik_unvan: "", // Backend'e gönderilecek ID'yi tutacak
+    // Kurum ve Bölüm kaldırıldı
   });
+  const [academicTitles, setAcademicTitles] = useState([]); // Kadro tiplerini tutacak state
+  const [loading, setLoading] = useState(true); // Genel yükleme durumu
+  const [submitting, setSubmitting] = useState(false); // Form gönderme durumu
+  const [error, setError] = useState(null);
+  const [successMessage, setSuccessMessage] = useState('');
+
+  // 1. Akademik Unvanları (Kadro Tiplerini) Çekme
+  useEffect(() => {
+    fetch('http://localhost:8000/api/kadro-tipi/', { credentials: 'include' })
+      .then(res => {
+        if (!res.ok) throw new Error('Akademik unvanlar alınamadı');
+        return res.json();
+      })
+      .then(data => {
+        setAcademicTitles(data.results || data); // Gelen yanıta göre .results olabilir
+      })
+      .catch(err => {
+        console.error("Akademik unvanları çekerken hata:", err);
+        setError("Akademik unvanlar yüklenemedi.");
+      });
+  }, []); // Sadece component mount olduğunda çalışır
+
+  // 2. Context'ten gelen kullanıcı bilgisiyle formu doldurma
+  useEffect(() => {
+    if (user) {
+      setFormData({
+        first_name: user.first_name || "",
+        last_name: user.last_name || "",
+        email: user.email || "",
+        telefon: user.telefon || "",
+        TC_KIMLIK: user.TC_KIMLIK || "",
+        // Backend'den user.akademik_unvan ID olarak gelmeli (serializer'da ayarlıysa)
+        // Eğer user.akademik_unvan nested obje ise user.akademik_unvan.id olmalı
+        akademik_unvan: user.akademik_unvan || "",
+      });
+      setLoading(false); // Formu doldurduktan sonra yüklemeyi bitir
+    } else if (!authLoading) {
+        // Auth context yüklemesi bitti ama kullanıcı yoksa hata ver/login'e yönlendir
+        setError("Kullanıcı bilgileri alınamadı. Lütfen tekrar giriş yapın.");
+        setLoading(false);
+    }
+  }, [user, authLoading]); // user veya authLoading değiştiğinde çalışır
 
   const handleChange = (e) => {
     const { name, value } = e.target;
-    setForm({ ...form, [name]: value });
+    setFormData(prevData => ({ ...prevData, [name]: value }));
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    alert("Bilgiler güncellendi!");
+    setError(null);
+    setSuccessMessage('');
+    setSubmitting(true);
+
+    const csrftoken = getCookie('csrftoken');
+    if (!csrftoken) {
+      setError("Güvenlik token'ı alınamadı.");
+      setSubmitting(false);
+      return;
+    }
+
+    // Backend'e gönderilecek veriyi hazırla (sadece güncellenebilir alanlar)
+    // Şifre ve TCKN genellikle buradan güncellenmez
+    const payload = {
+        first_name: formData.first_name,
+        last_name: formData.last_name,
+        email: formData.email,
+        telefon: formData.telefon,
+        // akademik_unvan ID olarak gönderilmeli. Select'in value'su ID olmalı.
+        akademik_unvan: formData.akademik_unvan ? parseInt(formData.akademik_unvan, 10) : null
+    };
+     // Sadece dolu olan (değiştirilen) alanları göndermek PATCH için daha uygundur,
+     // ama şimdilik tümünü gönderelim, backend serializer halleder varsayalım.
+
+    console.log("Gönderilen Payload:", payload);
+
+    try {
+      const response = await fetch('http://localhost:8000/api/auth/user/', { // dj-rest-auth user endpoint
+        method: 'PATCH', // VEYA PUT (PUT tüm alanları gerektirebilir)
+        headers: {
+          'Content-Type': 'application/json',
+          'X-CSRFToken': csrftoken
+        },
+        credentials: 'include',
+        body: JSON.stringify(payload)
+      });
+
+      const responseData = await response.json(); // Başarılı da olsa, hatalı da olsa yanıtı al
+
+      if (response.ok) {
+        setSuccessMessage("Profil bilgileri başarıyla güncellendi!");
+        console.log("Güncellenmiş kullanıcı verisi:", responseData);
+        // AuthContext'teki kullanıcı bilgisini de güncellemek iyi olur
+        updateUserInContext(responseData);
+      } else {
+        console.error("Profil güncelleme hatası:", responseData);
+        let errorMsg = `Hata (${response.status}): Profil güncellenemedi. `;
+        // Backend'den gelen validation hatalarını işle
+        for (const key in responseData) {
+            if (Array.isArray(responseData[key])) {
+                errorMsg += `${key}: ${responseData[key].join(', ')} `;
+            } else {
+                errorMsg += `${key}: ${responseData[key]} `;
+            }
+        }
+        setError(errorMsg.trim());
+      }
+    } catch (err) {
+      console.error("Profil güncelleme isteği sırasında hata:", err);
+      setError("Profil güncellenirken bir ağ hatası oluştu.");
+    } finally {
+      setSubmitting(false);
+    }
   };
 
+  // --- Yükleme veya Context Yükleme Durumu ---
+   if (authLoading || loading) {
+     return (
+       <>
+         <UserNavbar />
+         <div className="profile-wrapper">
+           <div className="profile-card">Profil bilgileri yükleniyor...</div>
+         </div>
+         <style>{` /* ... CSS ... */ `}</style>
+       </>
+     );
+   }
+
+   // Kullanıcı yoksa veya hata varsa (Context'ten veya fetch'ten)
+   if (!user || (error && !formData.email)) { // formData.email kontrolü, fetch hatası mı context hatası mı anlamak için
+     return (
+       <>
+         <UserNavbar />
+         <div className="profile-wrapper">
+           <div className="profile-card" style={{ color: 'red' }}>
+               Hata: Kullanıcı bilgileri yüklenemedi. Lütfen tekrar giriş yapmayı deneyin. {error && `(${error})`}
+           </div>
+         </div>
+         <style>{` /* ... CSS ... */ `}</style>
+       </>
+     );
+   }
+
+  // --- Profil Formu ---
   return (
     <>
-      {/* Navbar */}
       <UserNavbar />
-
-      {/* Profil Sayfası */}
       <div className="profile-wrapper">
         <div className="profile-card">
           <div className="profile-header">
@@ -37,49 +185,61 @@ export default function UserProfile() {
             <h2 className="profile-title">Profil Bilgilerim</h2>
           </div>
 
+          {successMessage && <div style={{ color: 'green', marginBottom: '1rem', textAlign: 'center' }}>{successMessage}</div>}
+          {error && !successMessage && <div style={{ color: 'red', marginBottom: '1rem', textAlign: 'center' }}>{error}</div>}
+
+
           <form onSubmit={handleSubmit} className="profile-form">
             <div className="form-section">
               <h3 className="section-title">Kişisel Bilgiler</h3>
-              <label>Ad Soyad
-                <input type="text" name="fullName" value={form.fullName} onChange={handleChange} required />
+              <label>Ad
+                 {/* Ad Soyad birleşik gösterilip, state'de ayrı tutulabilir veya iki ayrı input yapılabilir */}
+                <input type="text" name="first_name" value={formData.first_name} onChange={handleChange} required disabled={submitting}/>
               </label>
-              <label>T.C. Kimlik No
-                <input type="text" name="tckn" value={form.tckn} onChange={handleChange} required maxLength={11} />
+               <label>Soyad
+                <input type="text" name="last_name" value={formData.last_name} onChange={handleChange} required disabled={submitting}/>
+              </label>
+              <label>T.C. Kimlik No (Değiştirilemez)
+                {/* TCKN değiştirilemez olmalı */}
+                <input type="text" name="TC_KIMLIK" value={formData.TC_KIMLIK} readOnly disabled style={{ backgroundColor: '#eee' }} />
               </label>
               <label>E-posta
-                <input type="email" name="email" value={form.email} onChange={handleChange} required />
+                <input type="email" name="email" value={formData.email} onChange={handleChange} required disabled={submitting}/>
               </label>
               <label>Telefon Numarası
-                <input type="tel" name="phone" value={form.phone} onChange={handleChange} required />
+                <input type="tel" name="telefon" value={formData.telefon} onChange={handleChange} disabled={submitting}/>
               </label>
-              <label>Yeni Şifre
-                <input type="password" name="password" value={form.password} onChange={handleChange} />
-              </label>
+              {/* Yeni Şifre alanı kaldırıldı. Ayrı bir sayfada/modalda yapılmalı. */}
             </div>
 
             <div className="form-section">
               <h3 className="section-title">Akademik Bilgiler</h3>
-              <label>Kurum
-                <input type="text" name="institution" value={form.institution} onChange={handleChange} required />
-              </label>
-              <label>Bölüm
-                <input type="text" name="department" value={form.department} onChange={handleChange} required />
-              </label>
+               {/* Kurum ve Bölüm alanları kaldırıldı (DB'de yoktu) */}
               <label>Akademik Unvan
-                <select name="academicTitle" value={form.academicTitle} onChange={handleChange} required>
-                  <option value="Arş. Gör.">Arş. Gör.</option>
-                  <option value="Dr. Öğr. Üyesi">Dr. Öğr. Üyesi</option>
-                  <option value="Doçent">Doçent</option>
-                  <option value="Profesör">Profesör</option>
+                <select
+                    name="akademik_unvan" // name backend'deki field adı olmalı (veya ona maplenmeli)
+                    value={formData.akademik_unvan || ""} // value ID olmalı
+                    onChange={handleChange}
+                    required
+                    disabled={submitting}
+                >
+                  <option value="" disabled>Seçiniz...</option>
+                  {academicTitles.map(title => (
+                    // Option'ın value'su ID, görünen kısmı unvanın adı/tipi olmalı
+                    <option key={title.id} value={title.id}>
+                        {title.tip || title.ad || title.id} {/* Backend'den gelen unvan alanına göre */}
+                    </option>
+                  ))}
                 </select>
               </label>
             </div>
 
-            <button type="submit" className="profile-btn">Bilgileri Güncelle</button>
+            <button type="submit" className="profile-btn" disabled={submitting}>
+                {submitting ? 'Güncelleniyor...' : 'Bilgileri Güncelle'}
+            </button>
           </form>
         </div>
       </div>
-
       <style>{`
         /* Navbar ve Profil Wrapper Ayırma */
         .profile-wrapper {

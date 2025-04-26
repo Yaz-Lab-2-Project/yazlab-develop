@@ -1,7 +1,11 @@
+// src/components/navbars/UserNavbar.jsx
+
 import React, { useState, useEffect } from "react";
 import { NavLink, useNavigate } from "react-router-dom";
 import logo from "../../assets/kou_logo.png";
+import { useAuth } from "../../context/AuthContext"; // AuthContext hook'unu import edin
 
+// SVG Icon bileşeni (Mevcut kodunuzdaki gibi)
 const Icon = ({ name, width = 18, height = 18 }) => (
   <svg width={width} height={height} className="icon" aria-hidden="true">
     <use href={`/sprite.svg#${name}`} />
@@ -10,18 +14,30 @@ const Icon = ({ name, width = 18, height = 18 }) => (
 
 export default function UserNavbar() {
   const navigate = useNavigate();
+  const { user, logout, isAuthenticated } = useAuth(); // Context'ten user ve logout fonksiyonunu alın
   const [menuOpen, setMenuOpen] = useState(false);
   const [isMobile, setIsMobile] = useState(window.innerWidth <= 850);
 
-  const handleLogout = () => {
-    localStorage.removeItem("role");
-    localStorage.removeItem("userId");
-    navigate("/login");
+  // ===> DÜZELTİLMİŞ handleLogout Fonksiyonu <===
+  const handleLogout = async () => {
+    console.log("Logout button clicked");
+    try {
+        await logout(); // Context'teki async logout fonksiyonunu çağır ve bitmesini bekle
+        console.log("Context logout finished, navigating to /login");
+        navigate('/login'); // Context işlemi bitince login'e yönlendir
+    } catch (error) {
+        console.error("Error during logout process:", error);
+        // Kullanıcıya hata mesajı gösterilebilir
+        // Hata olsa bile login'e yönlendirmek genellikle mantıklıdır
+        navigate('/login');
+    }
+    closeMenu(); // Mobil menüyü kapat (eğer açıksa)
   };
 
   const toggleMenu = () => setMenuOpen(!menuOpen);
   const closeMenu = () => setMenuOpen(false);
 
+  // Mobil görünüm için useEffect (Mevcut kodunuzdaki gibi)
   useEffect(() => {
     const handleResize = () => {
       setIsMobile(window.innerWidth <= 850);
@@ -30,6 +46,14 @@ export default function UserNavbar() {
     window.addEventListener("resize", handleResize);
     return () => window.removeEventListener("resize", handleResize);
   }, []);
+
+
+  // Eğer kullanıcı giriş yapmamışsa (örneğin context yüklenirken)
+  // veya kullanıcı bilgisi henüz gelmemişse Navbar'ı gösterme veya farklı göster
+  // Bu kontrol AuthContext'in isLoading state'ine göre daha iyi yapılabilir
+  // if (!isAuthenticated) {
+  //    return null; // veya sadece login linki olan basit bir navbar
+  // }
 
   return (
     <>
@@ -156,41 +180,51 @@ export default function UserNavbar() {
 
       <nav className="navbar">
         <div className="navbar_top">
-          <NavLink to="/" onClick={closeMenu}>
+          {/* Logo linki (user login ise /user'a, değilse /'a gidebilir) */}
+          <NavLink to={isAuthenticated ? "/user" : "/"} onClick={closeMenu}>
             <img src={logo} alt="KOU Logo" className="logo" />
           </NavLink>
 
-          <button className="hamburger-button" onClick={toggleMenu}>
-            <Icon name={menuOpen ? "close" : "hamburger"} width={24} height={24} />
-          </button>
+          {/* Hamburger Butonu (sadece mobilde görünür) */}
+          {isAuthenticated && ( // Sadece giriş yapılmışsa hamburgeri göster
+               <button className="hamburger-button" onClick={toggleMenu} style={{ display: isMobile ? 'block' : 'none' }}>
+                 <Icon name={menuOpen ? "close" : "hamburger"} width={24} height={24} />
+               </button>
+          )}
 
-          <ul className={`navbar_links ${isMobile ? "mobile" : "desktop"}`}>
-            <li>
-              <NavLink to="/user" onClick={closeMenu} className={({ isActive }) => (isActive ? "active" : "")}>
-                <Icon name="home" /> Home
-              </NavLink>
-            </li>
-            <li>
-              <NavLink to="/listing" onClick={closeMenu} className={({ isActive }) => (isActive ? "active" : "")}>
-                <Icon name="post" /> İlanlar
-              </NavLink>
-            </li>
-            <li>
-              <NavLink to="/basvurularim" onClick={closeMenu} className={({ isActive }) => (isActive ? "active" : "")}>
-                <Icon name="agreement" /> Başvurularım
-              </NavLink>
-            </li>
-            <li>
-              <NavLink to="/profile" onClick={closeMenu} className={({ isActive }) => (isActive ? "active" : "")}>
-                <Icon name="profile" /> Kişisel Bilgiler
-              </NavLink>
-            </li>
-            <li>
-              <button onClick={() => { handleLogout(); closeMenu(); }} className="logout-button">
-                <Icon name="log-out" /> Çıkış Yap
-              </button>
-            </li>
-          </ul>
+
+          {/* Navigasyon Linkleri (isAuthenticated kontrolü eklendi) */}
+          {isAuthenticated && (
+              <ul className={`navbar_links ${isMobile ? "mobile" : "desktop"}`}>
+                <li>
+                  <NavLink to="/user" onClick={closeMenu} className={({ isActive }) => (isActive ? "active" : "")}>
+                    <Icon name="home" /> Ana Sayfa {/* Home -> Ana Sayfa */}
+                  </NavLink>
+                </li>
+                <li>
+                  <NavLink to="/listing" onClick={closeMenu} className={({ isActive }) => (isActive ? "active" : "")}>
+                    <Icon name="post" /> İlanlar
+                  </NavLink>
+                </li>
+                <li>
+                  <NavLink to="/basvurularim" onClick={closeMenu} className={({ isActive }) => (isActive ? "active" : "")}>
+                    <Icon name="agreement" /> Başvurularım
+                  </NavLink>
+                </li>
+                <li>
+                  <NavLink to="/profile" onClick={closeMenu} className={({ isActive }) => (isActive ? "active" : "")}>
+                    <Icon name="profile" /> Profil {/* Kişisel Bilgiler -> Profil */}
+                  </NavLink>
+                </li>
+                <li>
+                   {/* ====> DÜZELTİLMİŞ Buton <==== */}
+                   {/* Artık handleLogout fonksiyonunu çağırıyor */}
+                  <button onClick={handleLogout} className="logout-button">
+                    <Icon name="log-out" /> Çıkış Yap {user?.username ? `(${user.username})` : ''}
+                  </button>
+                </li>
+              </ul>
+          )}
         </div>
       </nav>
     </>
