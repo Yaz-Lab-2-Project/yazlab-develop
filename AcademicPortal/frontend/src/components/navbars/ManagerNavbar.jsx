@@ -86,16 +86,16 @@ export default function YoneticiNavbar() {
                   <Icon name="home" /> Dashboard
                 </NavLink>
               </li>
-              <li>
+              {/* <li>
                 <NavLink to="/manager-criteriapage" onClick={closeMenu} className={({ isActive }) => (isActive ? "active" : "")}>
                   <Icon name="settings" /> Kadro Kriterleri
                 </NavLink>
-              </li>
-              <li>
+              </li> */}
+              {/* <li>
                 <NavLink to="/manager-juri-atama" onClick={closeMenu} className={({ isActive }) => (isActive ? "active" : "")}>
                   <Icon name="users" /> Jüri Atama
                 </NavLink>
-              </li>
+              </li> */}
               <li>
                 <NavLink to="/manager-basvurular" onClick={closeMenu} className={({ isActive }) => (isActive ? "active" : "")}>
                   <Icon name="inbox" /> Başvurular
@@ -103,7 +103,7 @@ export default function YoneticiNavbar() {
               </li>
               <li>
                 <NavLink to="/manager-ilan" onClick={closeMenu} className={({ isActive }) => (isActive ? "active" : "")}>
-                  <Icon name="list" /> İlanlar {/* İkon değiştirildi */}
+                  <Icon name="list" /> İlana Kriter Ekle {/* İkon değiştirildi */}
                 </NavLink>
               </li>
               <li>

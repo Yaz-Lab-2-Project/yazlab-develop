@@ -102,42 +102,48 @@ const Advertisements = () => {
 
   // --- Filtreleme ve Sıralama ---
    const handleSearch = (e) => setSearchTerm(e.target.value);
+
    const handleSort = (key) => {
-        let direction = "asc";
-        if (sortConfig.key === key && sortConfig.direction === "asc") direction = "desc";
-        setSortConfig({ key, direction });
-   };
-   const sortedIlanlar = [...ilanlar].sort((a, b) => {
-    if (!sortConfig.key) return 0;
-    let key = sortConfig.key;
-    let valA = a[key]; let valB = b[key];
+    let direction = "asc";
+    // 'olusturan' için backend field'ı 'olusturan__username' varsayalım
+    const backendKey = key === 'olusturan' ? 'olusturan_username' : key;
+    if (sortConfig.key === backendKey && sortConfig.direction === "asc") direction = "desc";
+    setSortConfig({ key: backendKey, direction }); // State'i backend key'i ile set et
+};
+const sortedIlanlar = [...ilanlar].sort((a, b) => {
+  if (!sortConfig.key) return 0;
+  let key = sortConfig.key;
+  // Sıralanacak değerleri alırken ilişkili alanlara dikkat et
+  let valA = key.includes('.') ? key.split('.').reduce((o, i) => o?.[i], a) : a[key];
+  let valB = key.includes('.') ? key.split('.').reduce((o, i) => o?.[i], b) : b[key];
 
-    // İlişkili alanlar için özel sıralama (API yanıtındaki yapıya göre güncelleyin)
-    if (key === 'kadro_tipi') { valA = a.kadro_tipi?.tip?.toLowerCase() || ''; valB = b.kadro_tipi?.tip?.toLowerCase() || ''; }
-    else if (key === 'birim') { valA = a.birim?.ad?.toLowerCase() || ''; valB = b.birim?.ad?.toLowerCase() || ''; }
-    else if (key === 'bolum') { valA = a.bolum?.ad?.toLowerCase() || ''; valB = b.bolum?.ad?.toLowerCase() || ''; }
-    // Tarih alanları
-    else if (['baslangic_tarihi', 'bitis_tarihi', 'olusturulma_tarihi'].includes(key)) { valA = a[key] ? new Date(a[key]) : null; valB = b[key] ? new Date(b[key]) : null; if (valA === null && valB === null) return 0; if (valA === null) return sortConfig.direction === 'asc' ? 1 : -1; if (valB === null) return sortConfig.direction === 'asc' ? -1 : 1; }
-    // Diğer string alanlar
-    else if (typeof valA === 'string' && typeof valB === 'string') { valA = valA.toLowerCase(); valB = valB.toLowerCase(); }
-    // Boolean (aktif)
-    else if (key === 'aktif') { valA = a.aktif; valB = b.aktif; }
+  // İlişkili alanlar için özel sıralama
+  if (key === 'kadro_tipi.tip') { valA = a.kadro_tipi?.tip?.toLowerCase() || ''; valB = b.kadro_tipi?.tip?.toLowerCase() || ''; }
+  else if (key === 'birim.ad') { valA = a.birim?.ad?.toLowerCase() || ''; valB = b.birim?.ad?.toLowerCase() || ''; }
+  else if (key === 'bolum.ad') { valA = a.bolum?.ad?.toLowerCase() || ''; valB = b.bolum?.ad?.toLowerCase() || ''; }
+  else if (key === 'olusturan_username') { valA = a.olusturan_username?.toLowerCase() || ''; valB = b.olusturan_username?.toLowerCase() || ''; } // OLUŞTURAN EKLENDİ
+  // Tarih alanları
+  else if (['baslangic_tarihi', 'bitis_tarihi', 'olusturulma_tarihi'].includes(key)) { valA = a[key] ? new Date(a[key]) : null; valB = b[key] ? new Date(b[key]) : null; if (valA === null && valB === null) return 0; if (valA === null) return sortConfig.direction === 'asc' ? 1 : -1; if (valB === null) return sortConfig.direction === 'asc' ? -1 : 1; }
+  // Boolean (aktif)
+  else if (key === 'aktif') { valA = a.aktif; valB = b.aktif; }
+  // Diğer string alanlar
+  else if (typeof valA === 'string' && typeof valB === 'string') { valA = valA.toLowerCase(); valB = valB.toLowerCase(); }
 
-
-    if (valA < valB) return sortConfig.direction === "asc" ? -1 : 1;
-    if (valA > valB) return sortConfig.direction === "asc" ? 1 : -1;
-    return 0;
+  // Genel karşılaştırma
+  if (valA < valB) return sortConfig.direction === "asc" ? -1 : 1;
+  if (valA > valB) return sortConfig.direction === "asc" ? 1 : -1;
+  return 0;
 });
 
 const filteredIlanlar = sortedIlanlar.filter((ilan) => {
-  if (!searchTerm) return true; // Arama terimi yoksa hepsini göster
+  if (!searchTerm) return true;
   const searchLower = searchTerm.toLowerCase();
-  // Alanları kontrol et (API yanıtınızdaki ilişkili adları kullandığınızdan emin olun)
   return (
       (ilan.baslik?.toLowerCase().includes(searchLower)) ||
       (ilan.kadro_tipi?.tip?.toLowerCase().includes(searchLower)) ||
       (ilan.birim?.ad?.toLowerCase().includes(searchLower)) ||
-      (ilan.bolum?.ad?.toLowerCase().includes(searchLower))
+      (ilan.bolum?.ad?.toLowerCase().includes(searchLower)) ||
+      (ilan.olusturan_username?.toLowerCase().includes(searchLower)) // OLUŞTURAN EKLENDİ
   );
 });
 
@@ -249,39 +255,36 @@ const handleSave = async (e) => {
 
   return (
     <>
-      <AdminNavbar />
-      <div className="admin-ads-container">
-         {/* Başlık ve Ekle Butonu */}
-         <div className="page-header">
-             <h2 className="page-title">İlan Yönetimi</h2>
-             <button onClick={() => openForm()} className="button primary add-ilan-button">
-                 <FaPlus /> Yeni İlan Ekle
-             </button>
-         </div>
+    <AdminNavbar />
+    <div className="admin-ads-container">
+       <div className="page-header">
+           <h2 className="page-title">İlan Yönetimi</h2>
+           <button onClick={() => openForm()} className="button primary add-ilan-button">
+               <FaPlus /> Yeni İlan Ekle
+           </button>
+       </div>
 
-        {/* Arama */}
-        <input type="text" placeholder="Başlık, Kadro, Birim, Bölüm ara..." value={searchTerm} onChange={handleSearch} className="search-input card"/>
+      {/* Arama input placeholder güncellendi */}
+      <input type="text" placeholder="Başlık, Kadro, Birim, Bölüm, Oluşturan Ara..." value={searchTerm} onChange={handleSearch} className="search-input card"/>
 
-        {/* Genel Hata Mesajı */}
-        {error && <p className="error-message">{error}</p>}
+      {error && <p className="error-message">{error}</p>}
 
-        {/* Tablo ve Mobil Kartlar Container */}
-        <div className="table-container card">
-          {/* Masaüstü Tablo */}
-          <div className="desktop-table">
-            <table>
-              <thead>
-                 <tr>
+      <div className="table-container card">
+        <div className="desktop-table">
+          <table>
+            <thead>
+            <tr>
                      <th onClick={() => handleSort("baslik")}>Başlık {sortConfig.key === "baslik" ? (sortConfig.direction === "asc" ? "▲" : "▼") : "↕"}</th>
                      <th onClick={() => handleSort("kadro_tipi")}>Kadro {sortConfig.key === "kadro_tipi" ? (sortConfig.direction === "asc" ? "▲" : "▼") : "↕"}</th>
                      <th onClick={() => handleSort("birim")}>Birim {sortConfig.key === "birim" ? (sortConfig.direction === "asc" ? "▲" : "▼") : "↕"}</th>
                      <th onClick={() => handleSort("bolum")}>Bölüm {sortConfig.key === "bolum" ? (sortConfig.direction === "asc" ? "▲" : "▼") : "↕"}</th>
                      <th>Tarihler</th>
+                     <th onClick={() => handleSort("olusturan_username")}>Oluşturan Kullanıcı Adı {sortConfig.key === "olusturan_username" ? (sortConfig.direction === "asc" ? "▲" : "▼") : "↕"}</th>
                      <th onClick={() => handleSort("aktif")}>Durum {sortConfig.key === "aktif" ? (sortConfig.direction === "asc" ? "▲" : "▼") : "↕"}</th>
                      <th>İşlemler</th>
                  </tr>
-              </thead>
-              <tbody>
+            </thead>
+            <tbody>
                 {filteredIlanlar.length > 0 ? filteredIlanlar.map((ilan) => (
                   <tr key={ilan.id}>
                     <td>{ilan.baslik}</td>
@@ -289,6 +292,7 @@ const handleSave = async (e) => {
                     <td>{ilan.birim?.ad || ilan.birim || '-'}</td>
                     <td>{ilan.bolum?.ad || ilan.bolum || '-'}</td>
                     <td>{formatDate(ilan.baslangic_tarihi)} - {formatDate(ilan.bitis_tarihi)}</td>
+                    <td>{ilan.olusturan_username || '-'}</td>
                     <td><span className={`status-tag ${ilan.aktif ? "aktif" : "pasif"}`}>{ilan.aktif ? "Aktif" : "Pasif"}</span></td>
                     <td>
                       <div className="actions">
@@ -300,11 +304,11 @@ const handleSave = async (e) => {
                   </tr>
                 )) : (<tr><td colSpan="7" className="no-results">Gösterilecek ilan bulunamadı.</td></tr>)}
               </tbody>
-            </table>
-          </div>
+          </table>
+        </div>
 
-          {/* ====> MOBİL KARTLAR BÖLÜMÜ <==== */}
-          <div className="mobile-cards">
+        {/* ====> MOBİL KARTLARA OLUŞTURAN EKLENDİ <==== */}
+        <div className="mobile-cards">
                {filteredIlanlar.length > 0 ? filteredIlanlar.map((ilan) => (
                    <div key={ilan.id} className="ilan-card card"> 
                        <div className="card-header">
@@ -315,6 +319,7 @@ const handleSave = async (e) => {
                            <p><strong>Kadro:</strong> {ilan.kadro_tipi?.tip || ilan.kadro_tipi || '-'}</p>
                            <p><strong>Birim:</strong> {ilan.birim?.ad || ilan.birim || '-'}</p>
                            <p><strong>Bölüm:</strong> {ilan.bolum?.ad || ilan.bolum || '-'}</p>
+                           <p><strong>Oluşturan:</strong> {ilan.olusturan_username || '-'}</p>
                            <p><strong>Tarihler:</strong> {formatDate(ilan.baslangic_tarihi)} - {formatDate(ilan.bitis_tarihi)}</p>
                        </div>
                        <div className="actions">
@@ -548,6 +553,9 @@ tbody tr:last-child td:last-child { border-bottom-right-radius: var(--border-rad
     .modal-header h3 { font-size: 1.25rem; }
     .ilan-card .actions { grid-template-columns: 1fr; } /* Mobil kart butonları alt alta */
 }
+
+th { white-space: nowrap; }
+.ilan-card .card-body p { margin: 0.4rem 0; }
 `;
 
 export default Advertisements;

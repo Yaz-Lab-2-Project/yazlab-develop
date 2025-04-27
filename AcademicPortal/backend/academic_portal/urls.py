@@ -28,7 +28,6 @@ from apps.users.views import UserViewSet
 from apps.juri import views as juri_views # get_jury_dashboard_stats için
 from apps.users import views as user_views # set_csrf_token için
 from apps.ilanlar import views as ilan_views # get_manager_dashboard_data için
-from apps.ilanlar import views as ilan_views
 
 
 # --- DRF Router ---
@@ -63,10 +62,8 @@ urlpatterns = [
     path('api/set-csrf/', user_views.set_csrf_token, name='set-csrf'),
     path('api/auth/', include('dj_rest_auth.urls')),
     path('api/jury-stats/', juri_views.get_jury_dashboard_stats, name='jury-stats'),
-    # ===> ilan_views alias'ı burada doğru şekilde kullanılıyor <====
     path('api/manager-stats/', ilan_views.get_manager_dashboard_data, name='manager-stats'),
-        path('api/admin-stats/', ilan_views.get_admin_dashboard_data, name='admin-stats'),
-
+    path('api/admin-stats/', ilan_views.get_admin_dashboard_data, name='admin-stats'),
     path('api/', include(router.urls)), # Router en sonda
 ]
 

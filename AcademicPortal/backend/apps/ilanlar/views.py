@@ -2,7 +2,7 @@
 
 from rest_framework import viewsets, status, permissions
 from rest_framework.decorators import api_view, permission_classes
-from rest_framework.permissions import IsAdminUser, IsAuthenticatedOrReadOnly
+from rest_framework.permissions import IsAuthenticated, IsAuthenticatedOrReadOnly
 from rest_framework.response import Response
 from django.utils import timezone
 from datetime import timedelta
@@ -35,7 +35,7 @@ class IlanViewSet(viewsets.ModelViewSet):
 
 # --- Yönetici Dashboard View Fonksiyonu ---
 @api_view(['GET'])
-@permission_classes([IsAdminUser])
+@permission_classes([IsAuthenticated])
 def get_manager_dashboard_data(request):
     """
     Yönetici Paneli için özet verileri hesaplar ve döndürür.
@@ -84,7 +84,7 @@ def get_manager_dashboard_data(request):
 
 # --- Admin Dashboard View Fonksiyonu ---
 @api_view(['GET'])
-@permission_classes([IsAdminUser])
+@permission_classes([IsAuthenticated])
 def get_admin_dashboard_data(request):
     """
     Admin Paneli için özet verileri hesaplar ve döndürür.
