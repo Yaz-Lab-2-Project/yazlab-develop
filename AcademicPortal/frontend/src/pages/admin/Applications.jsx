@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react"; // useEffect eklendi
 import AdminNavbar from "../../components/navbars/AdminNavbar.jsx";
+import { applicationService } from "../../services/adminService";
 // import { useAuth } from "../../context/AuthContext"; // Gerekirse
 
 // Sabit veriyi kaldır
@@ -34,23 +35,22 @@ const Applications = () => {
 
   // Başvuruları çekme
   useEffect(() => {
-    setLoading(true);
-    setError(null);
-    fetch('http://localhost:8000/api/basvurular/', { credentials: 'include' })
-      .then(res => {
-        if (!res.ok) throw new Error(`Başvurular alınamadı (${res.status})`);
-        return res.json();
-      })
-      .then(data => {
-        console.log("Gelen Tüm Başvurular:", data);
-        setApplicationsData(data.results || data); // Pagination varsa .results
-      })
-      .catch(err => {
+    const fetchApplications = async () => {
+      try {
+        setLoading(true);
+        setError(null);
+        const data = await applicationService.getAll();
+        setApplicationsData(data.results || data);
+      } catch (err) {
         console.error("Başvuruları çekerken hata:", err);
         setError(err.message);
-      })
-      .finally(() => setLoading(false));
-  }, []); // Sadece component mount olduğunda
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchApplications();
+  }, []);
 
   // Filtrelenmiş başvurular (Client-side)
   const filteredApps = applicationsData.filter((app) => {

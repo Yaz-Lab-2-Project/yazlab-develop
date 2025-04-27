@@ -1,23 +1,17 @@
-# AcademicPortal/backend/academic_portal/settings.py
-
 import os
 from pathlib import Path
 
 # BASE_DIR: projenin kök dizini
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-# Güvenlik: kendi SECRET_KEY’inizi üretip buraya koyun
+# Güvenlik
 SECRET_KEY = 'dupxm%*6-!31f1abhd&x-_sj_v%u=p^w+49vtyi+b2%&8jm_=&'
-
-# Geliştirme aşamasında DEBUG=True, canlıda False
 DEBUG = True
-
-# İzin verilen hostlar (canlı ortamda domaine göre düzenleyin)
-ALLOWED_HOSTS = []
+ALLOWED_HOSTS = ['localhost', '127.0.0.1']
 
 # Uygulamalar
 INSTALLED_APPS = [
-    # Django yerleşik app’leri
+    # Django yerleşik
     'django.contrib.admin',
     'django.contrib.auth',
     'django.contrib.contenttypes',
@@ -32,8 +26,7 @@ INSTALLED_APPS = [
     'dj_rest_auth',
     'corsheaders',
 
-
-    # Projenin app’leri
+    # Proje app'leri
     'apps.users',
     'apps.ilanlar',
     'apps.temel_alan',
@@ -56,7 +49,7 @@ SITE_ID = 1
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
-    'corsheaders.middleware.CorsMiddleware',  # BURAYA EKLEYİN (CommonMiddleware'den önce)
+    'corsheaders.middleware.CorsMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
@@ -64,15 +57,18 @@ MIDDLEWARE = [
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
 
+# CORS ayarları
+CORS_ALLOW_ALL_ORIGINS = True
+CORS_ALLOW_CREDENTIALS = True
 CORS_ALLOWED_ORIGINS = [
-    "http://localhost:5173",  # Frontend uygulamanızın adresi
-    "http://127.0.0.1:5173", # Bazen bu da gerekebilir
-    # Gerekirse canlı sunucu adresinizi de buraya eklersiniz
+    'http://localhost:5173',
+    'http://127.0.0.1:5173',
 ]
 
-CORS_ALLOW_CREDENTIALS = True
-
+# CSRF güvenilir originler
 CSRF_TRUSTED_ORIGINS = [
+    'http://localhost:8000',
+    'http://127.0.0.1:8000',
     'http://localhost:5173',
     'http://127.0.0.1:5173',
 ]
@@ -82,7 +78,10 @@ ROOT_URLCONF = 'academic_portal.urls'
 TEMPLATES = [
     {
         'BACKEND': 'django.template.backends.django.DjangoTemplates',
-        'DIRS': [ BASE_DIR / 'templates' ],
+        'DIRS': [
+            BASE_DIR / 'templates',
+            BASE_DIR.parent / 'frontend' / 'dist',
+        ],
         'APP_DIRS': True,
         'OPTIONS': {
             'context_processors': [
@@ -97,7 +96,7 @@ TEMPLATES = [
 
 WSGI_APPLICATION = 'academic_portal.wsgi.application'
 
-# Veritabanı: SQLite (ayar gerekmiyorsa olduğu gibi bırakabilirsiniz)
+# Veritabanı (SQLite)
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.sqlite3',
@@ -105,67 +104,61 @@ DATABASES = {
     }
 }
 
-# Özel kullanıcı modelimizi kullanıyoruz
 AUTH_USER_MODEL = 'users.User'
 
 # Parola doğrulayıcılar
 AUTH_PASSWORD_VALIDATORS = [
-    {
-        'NAME': 'django.contrib.auth.password_validation.UserAttributeSimilarityValidator',
-    },
-    {
-        'NAME': 'django.contrib.auth.password_validation.MinimumLengthValidator',
-    },
-    {
-        'NAME': 'django.contrib.auth.password_validation.CommonPasswordValidator',
-    },
-    {
-        'NAME': 'django.contrib.auth.password_validation.NumericPasswordValidator',
-    },
+    {'NAME': 'django.contrib.auth.password_validation.UserAttributeSimilarityValidator'},
+    {'NAME': 'django.contrib.auth.password_validation.MinimumLengthValidator'},
+    {'NAME': 'django.contrib.auth.password_validation.CommonPasswordValidator'},
+    {'NAME': 'django.contrib.auth.password_validation.NumericPasswordValidator'},
 ]
 
-# Dil ve saat dilimi
+# Lokalizasyon
 LANGUAGE_CODE = 'tr-TR'
 TIME_ZONE = 'Europe/Istanbul'
 USE_I18N = True
 USE_L10N = True
 USE_TZ = True
 
-# Statik dosyalar (CSS, JS, img)
-STATIC_URL = '/static/'
-STATICFILES_DIRS = [ BASE_DIR / 'static' ]
+# Statik dosyalar (CSS/JS/Assets)
+STATIC_URL = '/assets/'
+STATICFILES_DIRS = [
+    BASE_DIR.parent / 'frontend' / 'dist' / 'assets',
+]
 STATIC_ROOT = BASE_DIR / 'staticfiles'
 
 # Medya dosyaları (kullanıcı yüklemeleri)
 MEDIA_URL = '/media/'
 MEDIA_ROOT = BASE_DIR / 'media'
 
-# Django REST Framework (gerekiyorsa özelleştirin)
+# Django REST Framework
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': [
+        'rest_framework.authentication.TokenAuthentication',
         'rest_framework.authentication.SessionAuthentication',
-        'rest_framework.authentication.BasicAuthentication',
     ],
     'DEFAULT_PERMISSION_CLASSES': [
         'rest_framework.permissions.IsAuthenticated',
     ],
 }
 
+# dj-rest-auth ayarları
 REST_AUTH = {
-    # Bu satır, /api/auth/user/ endpoint'inin sizin serializer'ınızı kullanmasını sağlar
     'USER_DETAILS_SERIALIZER': 'apps.users.serializers.UserSerializer',
-
-    # İhtiyaç duyarsanız diğer dj-rest-auth ayarlarını buraya ekleyebilirsiniz
-    # Örn: 'REGISTER_SERIALIZER': 'apps.users.serializers.CustomRegisterSerializer',
+    'TOKEN_SERIALIZER': 'dj_rest_auth.serializers.TokenSerializer',
+    'JWT_AUTH_COOKIE': None,
+    'JWT_AUTH_REFRESH_COOKIE': None,
+    'USE_JWT': False,
+    'SESSION_LOGIN': True,
 }
 
-# Varsayılan auto field
-DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
-
-
+# Session ve CSRF ayarları
+SESSION_COOKIE_SECURE = False  # Development için False
+CSRF_COOKIE_SECURE = False    # Development için False
+SESSION_COOKIE_SAMESITE = 'Lax'
+CSRF_COOKIE_SAMESITE = 'Lax'
 SESSION_COOKIE_HTTPONLY = True
-
 CSRF_COOKIE_HTTPONLY = False
 
-
-ALLOWED_HOSTS = ['localhost', '127.0.0.1']
+DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'

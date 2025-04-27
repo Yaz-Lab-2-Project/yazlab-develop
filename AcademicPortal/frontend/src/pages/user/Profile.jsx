@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import { FaUserCircle } from "react-icons/fa";
 import UserNavbar from "../../components/navbars/UserNavbar";
 import { useAuth } from "../../context/AuthContext"; // AuthContext'i import et
+import api from '../../services/api';
 
 // CSRF token'ı almak için getCookie fonksiyonu
 function getCookie(name) {
@@ -39,19 +40,14 @@ export default function UserProfile() {
 
   // 1. Akademik Unvanları (Kadro Tiplerini) Çekme
   useEffect(() => {
-    fetch('http://localhost:8000/api/kadro-tipi/', { credentials: 'include' })
+    api.get('/kadro-tipi/')
       .then(res => {
-        if (!res.ok) throw new Error('Akademik unvanlar alınamadı');
-        return res.json();
-      })
-      .then(data => {
-        setAcademicTitles(data.results || data); // Gelen yanıta göre .results olabilir
+        setAcademicTitles(res.data.results || res.data);
       })
       .catch(err => {
-        console.error("Akademik unvanları çekerken hata:", err);
-        setError("Akademik unvanlar yüklenemedi.");
+        setError(err.message || "Akademik unvanlar yüklenemedi.");
       });
-  }, []); // Sadece component mount olduğunda çalışır
+  }, []);
 
   // 2. Context'ten gelen kullanıcı bilgisiyle formu doldurma
   useEffect(() => {
@@ -108,39 +104,11 @@ export default function UserProfile() {
     console.log("Gönderilen Payload:", payload);
 
     try {
-      const response = await fetch('http://localhost:8000/api/auth/user/', { // dj-rest-auth user endpoint
-        method: 'PATCH', // VEYA PUT (PUT tüm alanları gerektirebilir)
-        headers: {
-          'Content-Type': 'application/json',
-          'X-CSRFToken': csrftoken
-        },
-        credentials: 'include',
-        body: JSON.stringify(payload)
-      });
-
-      const responseData = await response.json(); // Başarılı da olsa, hatalı da olsa yanıtı al
-
-      if (response.ok) {
-        setSuccessMessage("Profil bilgileri başarıyla güncellendi!");
-        console.log("Güncellenmiş kullanıcı verisi:", responseData);
-        // AuthContext'teki kullanıcı bilgisini de güncellemek iyi olur
-        updateUserInContext(responseData);
-      } else {
-        console.error("Profil güncelleme hatası:", responseData);
-        let errorMsg = `Hata (${response.status}): Profil güncellenemedi. `;
-        // Backend'den gelen validation hatalarını işle
-        for (const key in responseData) {
-            if (Array.isArray(responseData[key])) {
-                errorMsg += `${key}: ${responseData[key].join(', ')} `;
-            } else {
-                errorMsg += `${key}: ${responseData[key]} `;
-            }
-        }
-        setError(errorMsg.trim());
-      }
+      await api.patch('/auth/user/', payload);
+      setSuccessMessage("Profil bilgileri başarıyla güncellendi!");
+      updateUserInContext({ ...user, ...payload });
     } catch (err) {
-      console.error("Profil güncelleme isteği sırasında hata:", err);
-      setError("Profil güncellenirken bir ağ hatası oluştu.");
+      setError(err.message || "Profil güncellenirken bir ağ hatası oluştu.");
     } finally {
       setSubmitting(false);
     }

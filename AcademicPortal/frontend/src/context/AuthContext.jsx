@@ -1,5 +1,6 @@
 // src/context/AuthContext.jsx
 import React, { createContext, useState, useContext, useEffect, useCallback } from 'react';
+import api from '../services/api';
 
 // CSRF token'ı çerezden okumak için yardımcı fonksiyon
 function getCookie(name) {
@@ -22,84 +23,87 @@ const AuthContext = createContext(null);
 
 // 2. Provider Component'i oluştur
 export const AuthProvider = ({ children }) => {
-    const [user, setUser] = useState(null); // Giriş yapan kullanıcı bilgisi (veya null)
-    const [isLoading, setIsLoading] = useState(true); // Oturum kontrolü yapılıyor mu?
+    const [user, setUser] = useState(null);
+    const [isLoading, setIsLoading] = useState(true);
+    const [authToken, setAuthToken] = useState(localStorage.getItem('authToken'));
 
-    // Oturum Kontrolü - Uygulama ilk yüklendiğinde çalışır
     const checkUserSession = useCallback(async () => {
         console.log("AuthProvider: Checking user session...");
         setIsLoading(true);
+        
+        if (!authToken) {
+            console.log("AuthProvider: No auth token found");
+            setUser(null);
+            setIsLoading(false);
+            return;
+        }
+
         try {
-            const response = await fetch('http://localhost:8000/api/auth/user/', {
-                method: 'GET',
-                credentials: 'include', // Çerezleri göndermek için önemli!
-                headers: { 'Content-Type': 'application/json' }
-            });
-            if (response.ok) {
-                const userData = await response.json();
-                console.log("AuthProvider: Session valid, user data:", userData);
-                setUser(userData); // Kullanıcı varsa state'i güncelle
+            const response = await api.get('/auth/user/');
+            
+            if (response.data) {
+                console.log("AuthProvider: Session valid, user data:", response.data);
+                setUser(response.data);
             } else {
-                console.log("AuthProvider: No active session found (status:", response.status, ")");
-                setUser(null); // Oturum yoksa kullanıcı null
+                console.log("AuthProvider: Invalid session, clearing auth data");
+                localStorage.removeItem('authToken');
+                setAuthToken(null);
+                setUser(null);
             }
         } catch (error) {
             console.error("AuthProvider: Error checking session:", error);
-            setUser(null); // Hata durumunda kullanıcı null
+            localStorage.removeItem('authToken');
+            setAuthToken(null);
+            setUser(null);
         } finally {
-            setIsLoading(false); // Yükleme bitti
-            console.log("AuthProvider: Session check finished.");
+            setIsLoading(false);
         }
-    }, []); // Boş bağımlılık dizisi, sadece ilk mount'ta çalışır
+    }, [authToken]);
 
     useEffect(() => {
         checkUserSession();
-    }, [checkUserSession]); // checkUserSession'ı bağımlılık olarak ekle
+    }, [checkUserSession]);
 
-
-    // Login fonksiyonu - Login.jsx tarafından çağrılacak
-    const login = useCallback((userData) => {
+    const login = useCallback((userData, token) => {
         console.log("AuthProvider: Setting user data after login:", userData);
+        if (token) {
+            localStorage.setItem('authToken', token);
+            setAuthToken(token);
+        }
         setUser(userData);
-        // İsteğe bağlı: Başarılı login sonrası session kontrolünü tekrar tetiklemek
-        // yerine direkt state'i set etmek genellikle yeterlidir.
     }, []);
 
-    // Logout fonksiyonu
     const logout = useCallback(async () => {
         console.log("AuthProvider: Logging out...");
-        const csrftoken = getCookie('csrftoken');
-        if (!csrftoken) {
-            console.error('Logout için CSRF token bulunamadı.');
-            // Yine de local state'i temizleyebiliriz
-        }
         try {
-            await fetch('http://localhost:8000/api/auth/logout/', {
-                 method: 'POST',
-                 credentials: 'include',
-                 headers: {
-                     'Content-Type': 'application/json',
-                     'X-CSRFToken': csrftoken || "" // Token yoksa boş gönderilebilir, backend zaten session'ı siler
-                 }
-             });
-             console.log("AuthProvider: Logout API call successful (or attempted).");
-        } catch(err) {
-             console.error("AuthProvider: Logout API call failed:", err);
-         }
-         finally {
-               setUser(null); // Her durumda local kullanıcı state'ini temizle
-               console.log("AuthProvider: User state set to null.");
-         }
-    }, []); // Bağımlılık yok
+            await api.post('/auth/logout/');
+        } catch (err) {
+            console.error("AuthProvider: Logout API call failed:", err);
+        } finally {
+            localStorage.removeItem('authToken');
+            setAuthToken(null);
+            setUser(null);
+        }
+    }, []);
 
+    const hasRole = useCallback((requiredRole) => {
+        if (!user) return false;
+        if (requiredRole === 'admin') return user.user_type === 'ADMIN';
+        if (requiredRole === 'manager') return user.user_type === 'YONETICI';
+        if (requiredRole === 'jury') return user.user_type === 'JURI';
+        if (requiredRole === 'candidate') return user.user_type === 'ADAY';
+        return false;
+    }, [user]);
 
     // Context Provider'ın sağladığı değerler
     const value = {
-        user, // Mevcut kullanıcı objesi veya null
-        isAuthenticated: !!user, // user varsa true, yoksa false
-        isLoading, // Oturum kontrolü devam ediyor mu?
-        login, // Login fonksiyonu
-        logout // Logout fonksiyonu
+        user,
+        isAuthenticated: !!user,
+        isLoading,
+        login,
+        logout,
+        authToken,
+        hasRole
     };
 
     return (

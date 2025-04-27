@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from "react";
 import AdminNavbar from "../../components/navbars/AdminNavbar.jsx";
 import { FaEye, FaEdit, FaToggleOn, FaToggleOff, FaTrashAlt, FaPlus, FaTimes } from "react-icons/fa";
+import { userService } from "../../services/adminService";
 
 // CSRF token fonksiyonu
 function getCookie(name) {
@@ -24,7 +25,7 @@ function getCookie(name) {
 const formatDateTime = (dateTimeString) => {
     if (!dateTimeString) return "-";
     try { return new Date(dateTimeString).toLocaleString("tr-TR", { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }); }
-    catch (e) { return dateTimeString; }
+    catch  { return dateTimeString; }
 };
 
 
@@ -55,41 +56,41 @@ const Users = () => {
 
     // --- API Çağrıları ---
 
-    // Kullanıcıları ve Unvanları Çekme
     useEffect(() => {
         fetchUsers();
         fetchAcademicTitles();
     }, []);
 
-    const fetchUsers = () => {
-        setLoading(true); setError(null);
-        fetch('http://localhost:8000/api/users/', { credentials: 'include' })
-            .then(res => {
-                if (!res.ok) {
-                    if (res.status === 404) throw new Error(`Kullanıcı listeleme API endpoint'i (/api/users/) bulunamadı (${res.status}). Backend'i kontrol edin.`);
-                    throw new Error(`Kullanıcılar alınamadı (${res.status})`);
-                }
-                return res.json();
-            })
-            .then(data => {
-                console.log("Gelen Kullanıcılar:", data);
-                const userDataList = data.results || data;
-                if (Array.isArray(userDataList)) {
-                    setUsersData(userDataList); setError(null);
-                } else {
-                    console.error("API'den beklenen kullanıcı listesi formatı gelmedi:", data);
-                    throw new Error("API'den geçersiz veri formatı alındı (liste bekleniyordu).");
-                }
-            })
-            .catch(err => { console.error("Kullanıcıları çekerken hata:", err); setError(err.message); setUsersData([]); })
-            .finally(() => setLoading(false));
+    const fetchUsers = async () => {
+        try {
+            setLoading(true);
+            setError(null);
+            const data = await userService.getAll();
+            if (Array.isArray(data?.results)) {
+                setUsersData(data.results);
+            } else if (Array.isArray(data)) {
+                setUsersData(data);
+            } else {
+                throw new Error('Geçersiz kullanıcı verisi');
+            }
+        } catch (err) {
+            console.error("Kullanıcıları çekerken hata:", err);
+            setError(err.message);
+            setUsersData([]);
+        } finally {
+            setLoading(false);
+        }
     };
 
-    const fetchAcademicTitles = () => {
-        fetch('http://localhost:8000/api/kadro-tipi/', { credentials: 'include' })
-            .then(res => res.ok ? res.json() : Promise.reject('Unvanlar alınamadı'))
-            .then(data => setAcademicTitles(data.results || data))
-            .catch(err => console.error("Akademik unvanları çekerken hata:", err));
+    const fetchAcademicTitles = async () => {
+        try {
+            const response = await fetch('/api/kadro-tipi/');
+            if (!response.ok) throw new Error('Akademik unvanlar alınamadı');
+            const data = await response.json();
+            setAcademicTitles(data.results || data);
+        } catch (err) {
+            console.error("Akademik unvanları çekerken hata:", err);
+        }
     };
 
     // --- Filtreleme ve Sıralama ---
@@ -136,77 +137,71 @@ const Users = () => {
 
     // Yeni Kullanıcı Ekleme API Çağrısı
     const handleAddNewUser = async (e) => {
-        e.preventDefault(); setFormError(''); setIsSubmitting(true);
-        const csrftoken = getCookie('csrftoken');
-        if (!csrftoken) { setFormError("Güvenlik token'ı alınamadı."); setIsSubmitting(false); return; }
-
-        // akademik_unvan'ın null veya integer olduğundan emin ol
-        const payload = {
-            ...newUserData,
-            akademik_unvan: newUserData.akademik_unvan ? parseInt(newUserData.akademik_unvan, 10) : null
-        };
-        console.log("Yeni Kullanıcı Gönderiliyor:", payload);
+        e.preventDefault();
+        setFormError('');
+        setIsSubmitting(true);
 
         try {
-            const response = await fetch('http://localhost:8000/api/users/', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrftoken },
-                credentials: 'include',
-                body: JSON.stringify(payload) // payload'ı gönder
+            const payload = {
+                ...newUserData,
+                akademik_unvan: newUserData.akademik_unvan ? parseInt(newUserData.akademik_unvan, 10) : null
+            };
+
+            await userService.create(payload);
+            alert('Kullanıcı başarıyla eklendi!');
+            setIsAddFormVisible(false);
+            setNewUserData({
+                username: '', password: '', first_name: '', last_name: '',
+                email: '', TC_KIMLIK: '', user_type: 'ADAY', telefon: '', adres: '', akademik_unvan: null
             });
-            const responseData = await response.json();
-            if (response.ok || response.status === 201) {
-                alert('Kullanıcı başarıyla eklendi!'); setIsAddFormVisible(false);
-                setNewUserData({ username: '', password: '', first_name: '', last_name: '', email: '', TC_KIMLIK: '', user_type: 'ADAY', telefon: '', adres: '', akademik_unvan: null });
-                fetchUsers(); // Listeyi yenile
-            } else {
-                let errorMsg = `Hata (${response.status}): Kullanıcı eklenemedi. `;
-                for (const key in responseData) { errorMsg += `${key}: ${Array.isArray(responseData[key]) ? responseData[key].join(', ') : responseData[key]} `; }
-                setFormError(errorMsg.trim());
-            }
-        } catch (err) { console.error("Kullanıcı ekleme isteği sırasında hata:", err); setFormError("Kullanıcı eklenirken bir ağ hatası oluştu."); }
-        finally { setIsSubmitting(false); }
+            fetchUsers();
+        } catch (err) {
+            console.error("Kullanıcı ekleme hatası:", err);
+            setFormError(err.response?.data?.detail || "Kullanıcı eklenirken bir hata oluştu");
+        } finally {
+            setIsSubmitting(false);
+        }
     };
 
     // Kullanıcı Durumunu Değiştirme (Aktif/Pasif)
     const toggleStatus = async (userId, currentStatus) => {
         const actionText = currentStatus ? 'pasif' : 'aktif';
         if (!window.confirm(`Kullanıcıyı ${actionText} yapmak istediğinize emin misiniz?`)) return;
-        const csrftoken = getCookie('csrftoken');
-        if (!csrftoken) { alert("Güvenlik token'ı alınamadı."); return; }
-        // Butonun loading state'i için isDeletingUser kullanılabilir veya yeni bir state eklenebilir
-        setIsDeletingUser(userId); // Geçici olarak silme state'ini kullanalım
+
+        setIsDeletingUser(userId);
         setError(null);
+
         try {
-            const response = await fetch(`http://localhost:8000/api/users/${userId}/`, {
-                method: 'PATCH', headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrftoken },
-                credentials: 'include', body: JSON.stringify({ is_active: !currentStatus })
-            });
-            if (!response.ok) { const err = await response.json(); throw new Error(JSON.stringify(err)); }
-            const updatedUser = await response.json(); // Güncellenmiş kullanıcı verisini al
-            setUsersData(prev => prev.map(u => u.id === userId ? updatedUser : u)); // State'i güncelle
+            const updatedUser = await userService.update(userId, { is_active: !currentStatus });
+            setUsersData(prev => prev.map(u => u.id === userId ? updatedUser : u));
             alert(`Kullanıcı başarıyla ${actionText} hale getirildi.`);
-        } catch (err) { console.error("Durum güncelleme hatası:", err); setError(`Durum güncellenirken hata: ${err.message}`); alert(`Durum güncellenirken hata: ${err.message}`); }
-        finally { setIsDeletingUser(null); } // Loading state'ini kaldır
+        } catch (err) {
+            console.error("Durum güncelleme hatası:", err);
+            setError(`Durum güncellenirken hata: ${err.message}`);
+            alert(`Durum güncellenirken hata: ${err.message}`);
+        } finally {
+            setIsDeletingUser(null);
+        }
     };
 
     // Kullanıcı Silme
     const handleDeleteUser = async (userId, userName) => {
         if (!window.confirm(`${userName} isimli kullanıcıyı silmek istediğinize emin misiniz? Bu işlem geri alınamaz!`)) return;
-        const csrftoken = getCookie('csrftoken');
-        if (!csrftoken) { alert("Güvenlik token'ı alınamadı."); return; }
-        setIsDeletingUser(userId); setError(null);
+
+        setIsDeletingUser(userId);
+        setError(null);
+
         try {
-            const response = await fetch(`http://localhost:8000/api/users/${userId}/`, {
-                method: 'DELETE', headers: { 'X-CSRFToken': csrftoken }, credentials: 'include'
-            });
-            if (!response.ok && response.status !== 204) { // 204 No Content de başarılıdır
-                const errorData = await response.text(); throw new Error(`Kullanıcı silinemedi (${response.status}): ${errorData}`);
-            }
+            await userService.delete(userId);
             setUsersData(prevUsers => prevUsers.filter(u => u.id !== userId));
             alert('Kullanıcı başarıyla silindi.');
-        } catch (err) { console.error("Kullanıcı silme hatası:", err); setError(`Kullanıcı silinirken hata: ${err.message}`); alert(`Kullanıcı silinirken hata: ${err.message}`); }
-        finally { setIsDeletingUser(null); }
+        } catch (err) {
+            console.error("Kullanıcı silme hatası:", err);
+            setError(`Kullanıcı silinirken hata: ${err.message}`);
+            alert(`Kullanıcı silinirken hata: ${err.message}`);
+        } finally {
+            setIsDeletingUser(null);
+        }
     };
 
     // Kullanıcı Düzenleme Modalını Açma
@@ -234,39 +229,36 @@ const Users = () => {
 
     // Kullanıcı Güncelleme (PATCH)
     const handleUpdateUser = async (e) => {
-        e.preventDefault(); if (!editModalUser) return;
-        setFormError(''); setIsSubmitting(true);
-        const csrftoken = getCookie('csrftoken');
-        if (!csrftoken) { setFormError("Güvenlik token'ı alınamadı."); setIsSubmitting(false); return; }
+        e.preventDefault();
+        if (!editModalUser) return;
 
-        // Backend'e sadece değiştirilebilir alanları gönder
-        const payload = {
-            first_name: editFormData.first_name, last_name: editFormData.last_name,
-            email: editFormData.email, telefon: editFormData.telefon, adres: editFormData.adres,
-            user_type: editFormData.user_type,
-            akademik_unvan: editFormData.akademik_unvan ? parseInt(editFormData.akademik_unvan, 10) : null,
-            is_staff: editFormData.is_staff, is_superuser: editFormData.is_superuser,
-            is_active: editFormData.is_active, // Aktiflik durumunu da gönder
-        };
-        console.log("Güncelleme Payload:", payload);
+        setFormError('');
+        setIsSubmitting(true);
+
         try {
-            const response = await fetch(`http://localhost:8000/api/users/${editModalUser.id}/`, {
-                method: 'PATCH', headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrftoken },
-                credentials: 'include', body: JSON.stringify(payload)
-            });
-            const responseData = await response.json();
-            if (response.ok) {
-                alert("Kullanıcı başarıyla güncellendi!"); closeEditModal();
-                // Listeyi güncelle (güncellenen kullanıcıyla)
-                setUsersData(prev => prev.map(u => u.id === editModalUser.id ? responseData : u));
-            } else {
-                console.error("Kullanıcı güncelleme hatası:", responseData);
-                let errorMsg = `Hata (${response.status}): Güncelleme yapılamadı. `;
-                for (const key in responseData) { errorMsg += `${key}: ${Array.isArray(responseData[key]) ? responseData[key].join(', ') : responseData[key]} `; }
-                setFormError(errorMsg.trim()); // Modal içindeki hata state'ini kullan
-            }
-        } catch (err) { setFormError("Kullanıcı güncellenirken bir ağ hatası oluştu."); }
-        finally { setIsSubmitting(false); }
+            const payload = {
+                first_name: editFormData.first_name,
+                last_name: editFormData.last_name,
+                email: editFormData.email,
+                telefon: editFormData.telefon,
+                adres: editFormData.adres,
+                user_type: editFormData.user_type,
+                akademik_unvan: editFormData.akademik_unvan ? parseInt(editFormData.akademik_unvan, 10) : null,
+                is_staff: editFormData.is_staff,
+                is_superuser: editFormData.is_superuser,
+                is_active: editFormData.is_active,
+            };
+
+            const updatedUser = await userService.update(editModalUser.id, payload);
+            setUsersData(prev => prev.map(u => u.id === editModalUser.id ? updatedUser : u));
+            closeEditModal();
+            alert('Kullanıcı başarıyla güncellendi.');
+        } catch (err) {
+            console.error("Kullanıcı güncelleme hatası:", err);
+            setFormError(err.response?.data?.detail || "Kullanıcı güncellenirken bir hata oluştu");
+        } finally {
+            setIsSubmitting(false);
+        }
     };
 
 

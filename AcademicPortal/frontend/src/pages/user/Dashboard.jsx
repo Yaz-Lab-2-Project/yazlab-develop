@@ -3,6 +3,7 @@ import React, { useState, useEffect } from "react";
 // import { useNavigate } from "react-router-dom";
 import UserNavbar from "../../components/navbars/UserNavbar.jsx";
 import { useAuth } from "../../context/AuthContext"; // AuthContext'i import et
+import api from '../../services/api';
 
 // SABİT VERİLERİ SİLİN (ilanlar, duyurular, basvurular, predefinedUsers)
 
@@ -25,35 +26,15 @@ const UserDashboard = () => {
       setLoading(true);
       setError(null);
       try {
-        // Birden fazla isteği aynı anda gönderelim
         const [announcementsRes, listingsRes, applicationsRes] = await Promise.all([
-          // Duyuruları (Bildirimleri) çek - backend'in filtreleme yapması gerekebilir
-          fetch('http://localhost:8000/api/bildirimler/', { credentials: 'include' }),
-          // Aktif ilanları çek - backend'in filtreleme yapması gerekebilir
-          fetch('http://localhost:8000/api/ilanlar/?aktif=true', { credentials: 'include' }),
-           // Kullanıcının başvurularını çek - backend'in kullanıcıya göre filtrelemesi GEREKİR
-           // Örneğin: /api/basvurular/?my_applications=true gibi bir filtre olabilir backend'de
-          fetch('http://localhost:8000/api/basvurular/', { credentials: 'include' })
+          api.get('/bildirimler/'),
+          api.get('/ilanlar/', { params: { aktif: true } }),
+          api.get('/basvurular/')
         ]);
-
-        // Yanıtları kontrol et
-        if (!announcementsRes.ok) throw new Error(`Duyurular alınamadı: ${announcementsRes.statusText}`);
-        if (!listingsRes.ok) throw new Error(`İlanlar alınamadı: ${listingsRes.statusText}`);
-        if (!applicationsRes.ok) throw new Error(`Başvurular alınamadı: ${applicationsRes.statusText}`);
-
-        // Verileri JSON'a çevir
-        const announcementsData = await announcementsRes.json();
-        const listingsData = await listingsRes.json();
-        const applicationsData = await applicationsRes.json();
-
-        // State'leri güncelle
-        // Backend'den gelen yanıta göre filtreleme/ayarlama gerekebilir
-        setAnnouncements(announcementsData.results || announcementsData); // DRF pagination varsa .results
-        setLatestAnnouncements(listingsData.results || listingsData);
-        setApplications(applicationsData.results || applicationsData);
-
+        setAnnouncements(announcementsRes.data.results || announcementsRes.data);
+        setLatestAnnouncements(listingsRes.data.results || listingsRes.data);
+        setApplications(applicationsRes.data.results || applicationsRes.data);
       } catch (err) {
-        console.error("Dashboard verileri çekilirken hata:", err);
         setError(err.message);
       } finally {
         setLoading(false);

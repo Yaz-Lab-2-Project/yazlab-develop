@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import UserNavbar from "../../components/navbars/UserNavbar";
+import api from '../../services/api';
 
 // --- IlanCard Bileşeni ---
 const IlanCard = ({ ilan }) => {
@@ -17,8 +18,8 @@ const IlanCard = ({ ilan }) => {
     if (!dateString) return "";
     try {
       return new Date(dateString).toLocaleDateString("tr-TR");
-    } catch (e) {
-      return dateString; // Hata olursa orijinalini göster
+    } catch {
+      return dateString;
     }
   };
   return (
@@ -50,25 +51,17 @@ const IlanListesi = () => {
   useEffect(() => {
     setLoading(true);
     setError(null);
-    fetch('http://localhost:8000/api/ilanlar/', { credentials: 'include' })
+    api.get('/ilanlar/')
       .then(res => {
-        if (!res.ok) {
-          throw new Error(`Veri çekilemedi (${res.status})`);
-        }
-        return res.json();
-      })
-      .then(data => {
-        // Gelen verinin yapısına göre ayarlayın (DRF pagination kullanıyorsa data.results olabilir)
-        setIlanlarData(data.results || data);
+        setIlanlarData(res.data.results || res.data);
       })
       .catch(err => {
-        console.error("İlanları çekerken hata:", err);
         setError(err.message);
       })
       .finally(() => {
         setLoading(false);
       });
-  }, []); // Sadece component mount olduğunda çalışır
+  }, []);
 
   // Filtreleme işlemini API'den gelen veri üzerinde yap
   const filtrelenmisIlanlar = ilanlarData.filter(

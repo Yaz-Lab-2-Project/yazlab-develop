@@ -37,86 +37,67 @@ const Login = () => {
         setError("");
         setLoading(true);
 
-        const csrftoken = getCookie('csrftoken');
-
-        if (!csrftoken) {
-            setError('Güvenlik token\'ı alınamadı. Sayfayı yenileyip tekrar deneyin.');
-            setLoading(false);
-            return;
-        }
-
         try {
-            const response = await fetch('http://localhost:8000/api/auth/login/', {
+            // 1. CSRF token'ı al
+            await fetch('/api/set-csrf/', {
+                method: 'GET',
+                credentials: 'include'
+            });
+
+            // 2. Login isteği
+            const loginResponse = await fetch('/api/auth/login/', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
-                    'X-CSRFToken': csrftoken
+                    'X-CSRFToken': getCookie('csrftoken')
                 },
                 credentials: 'include',
-                body: JSON.stringify({ username: username, password: password })
+                body: JSON.stringify({
+                    username: username,
+                    password: password
+                })
             });
 
-            if (response.ok) {
-                // Giriş API'si başarılı, şimdi kullanıcı detaylarını alalım
-                try {
-                    const userResponse = await fetch('http://localhost:8000/api/auth/user/', {
-                        method: 'GET',
-                        headers: { 'Content-Type': 'application/json' },
-                        credentials: 'include'
-                    });
-                    if (userResponse.ok) {
-                        const userData = await userResponse.json();
-                        // ====> SADECE CONTEXT'i GÜNCELLE <====
-                        login(userData);
-                        console.log("Login successful, context updated. AuthHandler should redirect.");
-                        // Yönlendirme burada yapılmayacak, AuthHandler yapacak.
-                    } else {
-                        setError("Giriş başarılı ancak kullanıcı bilgileri alınamadı. Sayfayı yenileyin.");
-                        // Başarılı login sonrası user fetch edilemiyorsa context'i null yapmak mantıklı olabilir
-                        // login(null); // Veya context'te ayrı bir error state tutulabilir
-                    }
-                } catch (userError) {
-                     setError("Giriş başarılı ancak kullanıcı bilgileri alınırken bir hata oluştu.");
-                     console.error("Kullanıcı bilgisi alma hatası:", userError);
-                     // login(null);
-                }
-            } else {
-                // Giriş başarısız
-                let errorMsg = `Hata (${response.status}): `;
-                try {
-                     const errorData = await response.json();
-                     console.error('Giriş hatası:', errorData);
-                     if (errorData.non_field_errors) {
-                         errorMsg += errorData.non_field_errors.join(' ');
-                     } else if (errorData.detail) {
-                         errorMsg += errorData.detail;
-                     } else {
-                         errorMsg += "Kullanıcı adı veya şifre hatalı/geçersiz.";
-                     }
-                } catch(jsonError) {
-                     // JSON parse edilemezse veya başka bir hata
-                     errorMsg += "Sunucudan geçersiz yanıt veya ağ hatası."
-                }
-                setError(errorMsg);
+            const data = await loginResponse.json();
+
+            if (!loginResponse.ok) {
+                throw new Error(data.detail || data.non_field_errors?.[0] || 'Giriş başarısız');
             }
+
+            // 3. Kullanıcı bilgilerini al
+            const userResponse = await fetch('/api/auth/user/', {
+                method: 'GET',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Token ${data.key}`
+                },
+                credentials: 'include'
+            });
+
+            if (!userResponse.ok) {
+                throw new Error('Kullanıcı bilgileri alınamadı');
+            }
+
+            const userData = await userResponse.json();
+            // Token'ı da login fonksiyonuna gönder
+            login(userData, data.key);
+
         } catch (error) {
-            console.error('İstek sırasında bir hata oluştu:', error);
-            setError('Giriş yapılırken bir ağ hatası veya sunucu hatası oluştu.');
+            console.error('Login error:', error);
+            setError(error.message || 'Giriş yapılırken bir hata oluştu');
         } finally {
-             setLoading(false);
+            setLoading(false);
         }
     };
 
-    // CSRF Çerezini almak için ilk istek
+    // CSRF token'ı sayfa yüklendiğinde al
     useEffect(() => {
-      fetch('http://localhost:8000/api/set-csrf/', {
-        method: 'GET',
-        credentials: 'include'
-      }).then(response => {
-          console.log('Set CSRF request completed, status:', response.status);
-      }).catch(err => {
-         console.log("İlk istek (set-csrf) sırasında hata:", err);
-      });
+        fetch('/api/set-csrf/', {
+            method: 'GET',
+            credentials: 'include'
+        }).catch(err => {
+            console.error("CSRF token alma hatası:", err);
+        });
     }, []);
 
     return (

@@ -1,10 +1,11 @@
-import React, { useState, useEffect } from "react"; // useEffect eklendi
+import React, { useState, useEffect } from "react";
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid, ResponsiveContainer, Legend, Cell
 } from "recharts";
 import AdminNavbar from "../../components/navbars/AdminNavbar.jsx";
+import { dashboardService } from "../../services/adminService";
 
-const COLORS = ["#009944", "#ffc107", "#28a745", "#dc3545", "#007c39", "#6f42c1"]; // Gerekirse daha fazla renk
+const COLORS = ["#009944", "#ffc107", "#28a745", "#dc3545", "#007c39", "#6f42c1"];
 
 const styles = {
   body: {
@@ -32,13 +33,13 @@ const styles = {
     height: "180px",
     display: "flex",
     flexDirection: "column",
-    justifyContent: "center", // İçeriği dikey olarak ortalar
-    alignItems: "center", // İçeriği yatay olarak ortalar
-    textAlign: "center", // Yazıları ortalar
+    justifyContent: "center",
+    alignItems: "center",
+    textAlign: "center",
     borderRadius: "20px",
     boxShadow: "0 6px 12px rgba(0,0,0,0.1)",
     transition: "transform 0.3s ease, box-shadow 0.3s ease",
-    padding: "10px" // İçerik için boşluk ekler
+    padding: "10px"
   },
   cardHover: {
     transform: "scale(1.05)",
@@ -47,16 +48,16 @@ const styles = {
   title: {
     color: "#333",
     marginBottom: "10px",
-    fontSize: "16px", // Daha küçük yazı boyutu
-    fontWeight: "500", // Yazıyı daha belirgin hale getirir
-    lineHeight: "1.4", // Satır yüksekliğini artırır
-    textAlign: "center" // Yazıyı ortalar
+    fontSize: "16px",
+    fontWeight: "500",
+    lineHeight: "1.4",
+    textAlign: "center"
   },
   value: {
-    fontSize: "24px", // Yazı boyutunu biraz küçültür
+    fontSize: "24px",
     fontWeight: "bold",
-    color: "#000", // Yazı rengini siyah yapar
-    textAlign: "center" // Yazıyı ortalar
+    color: "#000",
+    textAlign: "center"
   },
   yellow: { backgroundColor: "#ffc107", color: "#fff" },
   green: { backgroundColor: "#28a745", color: "#fff" },
@@ -94,95 +95,115 @@ const Card = ({ title, value, style }) => {
 };
 
 const AdminDashboard = () => {
-  // State tanımlamaları
-  const [dashboardStats, setDashboardStats] = useState({
-      stats: {},
-      departmentApplications: []
+  const [dashboardData, setDashboardData] = useState({
+    stats: {
+      totalPostings: 0,
+      activePostings: 0,
+      ongoingApplications: 0,
+      mostApplied: '-',
+      totalUsers: 0,
+      totalApplications: 0
+    },
+    departmentApplications: []
   });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
-  // Veri çekme
   useEffect(() => {
-    setLoading(true);
-    setError(null);
-    fetch('http://localhost:8000/api/admin-stats/', { credentials: 'include' }) // Backend endpoint'iniz
-      .then(res => {
-        if (!res.ok) {
-          throw new Error(`Admin dashboard verileri alınamadı (${res.status})`);
-        }
-        return res.json();
-      })
-      .then(data => {
-        console.log("Gelen Admin Dashboard Verisi:", data);
-        // Gelen verinin beklenen yapıda olduğunu kontrol edin
-        setDashboardStats({
-            stats: data.stats || {},
-            departmentApplications: data.departmentApplications || []
+    const fetchDashboardData = async () => {
+      try {
+        setLoading(true);
+        setError(null);
+        
+        const response = await dashboardService.getStats();
+        console.log('Dashboard data:', response);
+
+        // Veri yapısını kontrol et ve düzelt
+        const stats = response?.stats || {};
+        const departmentApplications = Array.isArray(response?.departmentApplications) 
+          ? response.departmentApplications.map(item => ({
+              name: item.name || 'Bilinmeyen',
+              value: parseInt(item.value) || 0
+            }))
+          : [];
+
+        setDashboardData({
+          stats: {
+            totalPostings: parseInt(stats.totalPostings) || 0,
+            activePostings: parseInt(stats.activePostings) || 0,
+            ongoingApplications: parseInt(stats.ongoingApplications) || 0,
+            mostApplied: stats.mostApplied || '-',
+            totalUsers: parseInt(stats.totalUsers) || 0,
+            totalApplications: parseInt(stats.totalApplications) || 0
+          },
+          departmentApplications
         });
-      })
-      .catch(err => {
-        console.error("Admin dashboard verisi çekilirken hata:", err);
-        setError(err.message);
-      })
-      .finally(() => {
+      } catch (err) {
+        console.error("Dashboard verisi çekilirken hata:", err);
+        setError(err.message || "Veriler yüklenirken bir hata oluştu");
+        setDashboardData({
+          stats: {
+            totalPostings: 0,
+            activePostings: 0,
+            ongoingApplications: 0,
+            mostApplied: '-',
+            totalUsers: 0,
+            totalApplications: 0
+          },
+          departmentApplications: []
+        });
+      } finally {
         setLoading(false);
-      });
-  }, []); // Sadece component mount olduğunda çalışır
+      }
+    };
 
-
-  // --- Render ---
+    fetchDashboardData();
+  }, []);
 
   if (loading) {
     return ( <><AdminNavbar /><div style={styles.body}><p>Admin paneli verileri yükleniyor...</p></div></> );
   }
 
-  if (error) {
-    return ( <><AdminNavbar /><div style={styles.body}><h1 style={styles.headerTitle}>Admin Dashboard</h1><p style={{color:'red', textAlign:'center'}}>Hata: {error}</p></div></> );
-  }
+  const { stats, departmentApplications } = dashboardData;
 
-  // Veri varsa render et
   return (
     <>
       <AdminNavbar />
       <div style={styles.body}>
         <header style={styles.header}>
           <h1 style={styles.headerTitle}>Admin Dashboard</h1>
+          {error && <p style={{color: 'red', textAlign: 'center', marginTop: '1rem'}}>{error}</p>}
         </header>
         <div style={styles.container}>
-          {/* Kartları API'den gelen veriyle doldur */}
-          <Card title="Toplam İlan Sayısı" value={dashboardStats.stats?.totalPostings ?? '-'} />
-          <Card title="Aktif İlan Sayısı" value={dashboardStats.stats?.activePostings ?? '-'} style={styles.green} />
-          <Card title="Devam Eden Başvuru Süreçleri" value={dashboardStats.stats?.ongoingApplications ?? '-'} style={styles.yellow} />
-          {/* En çok başvuru alan ilan için backend'den gelen veriyi kullanın */}
-          {/* Eğer obje dönüyorsa: dashboardStats.stats?.mostApplied?.baslik ?? '-' */}
-          <Card title="En Çok Başvuru Yapılan İlan" value={dashboardStats.stats?.mostApplied ?? '-'} style={styles.red} />
+          <Card title="Toplam İlan Sayısı" value={stats.totalPostings} />
+          <Card title="Aktif İlan Sayısı" value={stats.activePostings} style={styles.green} />
+          <Card title="Devam Eden Başvuru Süreçleri" value={stats.ongoingApplications} style={styles.yellow} />
+          <Card title="En Çok Başvuru Yapılan İlan" value={stats.mostApplied} style={styles.red} />
         </div>
 
-        {/* Grafik Alanı */}
         <div style={styles.chartContainer}>
           <h2 style={styles.chartTitle}>Başvuru Yapılan Bölümlerin Dağılımı</h2>
-           {dashboardStats.departmentApplications?.length > 0 ? (
-               <ResponsiveContainer width="100%" height={320}>
-                 {/* Grafiği API'den gelen veriyle doldur */}
-                 <BarChart data={dashboardStats.departmentApplications} margin={{ top: 20, right: 30, left: 0, bottom: 10 }}>
-                   <CartesianGrid strokeDasharray="3 3" />
-                   {/* dataKey'lerin API yanıtındaki alan adlarıyla eşleştiğinden emin olun */}
-                   <XAxis dataKey="name" tick={{ fontSize: 12 }} />
-                   <YAxis allowDecimals={false} />
-                   <Tooltip />
-                   <Legend />
-                   <Bar dataKey="value" fill="#009944">
-                     {/* Renkleri dinamik ata */}
-                     {(dashboardStats.departmentApplications || []).map((entry, index) => (
-                       <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                     ))}
-                   </Bar>
-                 </BarChart>
-               </ResponsiveContainer>
-           ) : (
-               <p style={{textAlign:'center', color:'#6c757d'}}>Grafik için bölüm verisi bulunamadı.</p>
-           )}
+          {departmentApplications.length > 0 ? (
+            <ResponsiveContainer width="100%" height={320}>
+              <BarChart 
+                data={departmentApplications} 
+                margin={{ top: 20, right: 30, left: 0, bottom: 10 }}
+              >
+                <CartesianGrid strokeDasharray="3 3" />
+                <XAxis dataKey="name" tick={{ fontSize: 12 }} />
+                <YAxis allowDecimals={false} />
+                <Tooltip />
+                <Legend />
+                <Bar dataKey="value" fill="#009944">
+                  {departmentApplications.map((entry, index) => (
+                    <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                  ))}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          ) : (
+            <p style={{textAlign:'center', color:'#6c757d'}}>Grafik için bölüm verisi bulunamadı.</p>
+          )}
         </div>
       </div>
     </>

@@ -67,10 +67,21 @@ urlpatterns = [
     path('api/', include(router.urls)), # Router en sonda
 ]
 
+# Frontend dosyalarını servis etmek için
+from django.views.generic import TemplateView
+from django.views.generic.base import RedirectView
+
+# Frontend ana sayfasını servis et
+urlpatterns += [
+    path('', TemplateView.as_view(template_name='index.html'), name='frontend'),
+    # Tüm frontend rotalarını index.html'e yönlendir (SPA için)
+    path('<path:path>', TemplateView.as_view(template_name='index.html'), name='frontend-catch-all'),
+]
+
 # --- Statik/Medya Ayarları ---
 from django.conf import settings
 from django.conf.urls.static import static
 
 if settings.DEBUG:
     urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
-    # urlpatterns += static(settings.STATIC_URL, document_root=settings.STATIC_ROOT)
+    urlpatterns += static(settings.STATIC_URL, document_root=settings.STATIC_ROOT)

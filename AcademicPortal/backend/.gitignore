@@ -2,8 +2,7 @@
 __pycache__/ 
 *.log 
 *.pot 
-*.pyc 
-db.sqlite3 
+*.pyc  
 media/ 
 staticfiles/ 
 .env 

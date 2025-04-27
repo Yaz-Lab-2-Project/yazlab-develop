@@ -5,6 +5,7 @@ import UserNavbar from "../../components/navbars/UserNavbar";
 import { FaFileAlt } from "react-icons/fa";
 // AuthContext'i kullanmıyoruz çünkü backend zaten kullanıcıya göre filtreliyor olmalı
 // import { useAuth } from "../../context/AuthContext";
+import api from '../../services/api';
 
 // Sabit verileri kaldırıyoruz
 // const academicAnnouncements = [ ... ];
@@ -27,27 +28,17 @@ export default function MyApplications() {
   useEffect(() => {
     setLoading(true);
     setError(null);
-    // Backend'den GİRİŞ YAPMIŞ KULLANICIYA ait başvuruları çek
-    fetch('http://localhost:8000/api/basvurular/', { credentials: 'include' })
+    api.get('/basvurular/')
       .then(res => {
-        if (!res.ok) {
-          throw new Error(`Başvurularım alınamadı (${res.status})`);
-        }
-        return res.json();
-      })
-      .then(data => {
-        console.log("Gelen Başvurular:", data); // Gelen veriyi kontrol et
-        // DRF pagination varsa data.results, yoksa doğrudan data
-        setApplications(data.results || data);
+        setApplications(res.data.results || res.data);
       })
       .catch(err => {
-        console.error("Başvuruları çekerken hata:", err);
         setError(err.message);
       })
       .finally(() => {
         setLoading(false);
       });
-  }, []); // Sadece component mount olduğunda çalışır
+  }, []);
 
   const toggleDialog = (id) => {
     setOpenId(prev => (prev === id ? null : id));
@@ -57,11 +48,10 @@ export default function MyApplications() {
   const formatDate = (dateString) => {
     if (!dateString) return "";
     try {
-      // Zaman bilgisini de gösterebiliriz
       return new Date(dateString).toLocaleString("tr-TR", {
-          year: 'numeric', month: 'long', day: 'numeric' //, hour: '2-digit', minute: '2-digit'
+          year: 'numeric', month: 'long', day: 'numeric'
       });
-    } catch (e) {
+    } catch {
       return dateString;
     }
   };

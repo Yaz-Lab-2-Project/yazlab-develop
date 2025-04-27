@@ -87,8 +87,17 @@ function AuthHandler() {
             else if (userRole === "yonetici") targetPath = "/manager";
             else if (userRole === "juri") targetPath = "/jury";
 
-            // Sadece login sayfasındaysak veya henüz bir dashboard'da değilsek yönlendir
-            const dashboardPaths = ['/user', '/admin', '/manager', '/jury'];
+            // Tüm dashboard ve ilgili alt sayfaları kapsayan path'ler
+            const dashboardPaths = [
+              // User
+              '/user', '/listing', '/apply', '/basvurularim', '/profile',
+              // Admin
+              '/admin', '/admin-applications', '/admin-advertisements', '/admin-users',
+              // Manager
+              '/manager', '/manager-ilan', '/manager-ilan/', '/manager-basvurular', '/manager-criteriapage', '/manager-profile',
+              // Jury
+              '/jury', '/jury-rapor', '/jury-reviews', '/jury-applications', '/jury-userapplication'
+            ];
             const isOnDashboard = dashboardPaths.some(path => location.pathname.startsWith(path));
 
             if (targetPath !== '/' && (onLoginPage || !isOnDashboard)) {

@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from "react";
 import AdminNavbar from "../../components/navbars/AdminNavbar.jsx";
 import { FaEye, FaEdit, FaTrashAlt, FaPlus, FaTimes } from "react-icons/fa";
+import { advertisementService } from "../../services/adminService";
 
 // CSRF token fonksiyonu
 function getCookie(name) {
@@ -71,33 +72,54 @@ const Advertisements = () => {
     fetchOptions();
   }, []);
 
-  const fetchIlanlar = () => {
-    setLoading(true); setError(null);
-    fetch('http://localhost:8000/api/ilanlar/', { credentials: 'include' })
-      .then(res => { if (!res.ok) throw new Error(`İlanlar alınamadı (${res.status})`); return res.json(); })
-      .then(data => { setIlanlar(data.results || data); setError(null); })
-      .catch(err => { setError(err.message); setIlanlar([]); })
-      .finally(() => setLoading(false));
+  const fetchIlanlar = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      const data = await advertisementService.getAll();
+      if (Array.isArray(data?.results)) {
+        setIlanlar(data.results);
+      } else if (Array.isArray(data)) {
+        setIlanlar(data);
+      } else {
+        throw new Error('Geçersiz ilan verisi');
+      }
+    } catch (err) {
+      console.error("İlanlar çekilirken hata:", err);
+      setError(err.message);
+      setIlanlar([]);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const fetchOptions = async () => {
     const fetchOption = async (url) => {
       try {
-          const res = await fetch(url, { credentials: 'include' });
-          if (!res.ok) { console.error(`Option fetch failed for ${url}: ${res.status}`); return []; }
-          const data = await res.json();
-          return data.results || data;
+        const res = await fetch(`/api/${url}/`);
+        if (!res.ok) throw new Error(`${url} verileri alınamadı`);
+        const data = await res.json();
+        return data.results || data;
       } catch (err) {
-          console.error(`Error fetching options from ${url}:`, err);
-          return []; // Hata durumunda boş dizi döndür
+        console.error(`${url} verileri çekilirken hata:`, err);
+        return [];
       }
-  };
-      try {
-        const [kadroData, birimData, bolumData, anabilimData] = await Promise.all([
-            fetchOption('http://localhost:8000/api/kadro-tipi/'), fetchOption('http://localhost:8000/api/birim/'),
-            fetchOption('http://localhost:8000/api/bolum/'), fetchOption('http://localhost:8000/api/anabilim-dali/') ]);
-        setKadroTipiOptions(kadroData); setBirimOptions(birimData); setBolumOptions(bolumData); setAnabilimDaliOptions(anabilimData);
-      } catch (error) { console.error("Dropdown seçenekleri çekilirken hata:", error); }
+    };
+
+    try {
+      const [kadroData, birimData, bolumData, anabilimData] = await Promise.all([
+        fetchOption('kadro-tipi'),
+        fetchOption('birim'),
+        fetchOption('bolum'),
+        fetchOption('anabilim-dali')
+      ]);
+      setKadroTipiOptions(kadroData);
+      setBirimOptions(birimData);
+      setBolumOptions(bolumData);
+      setAnabilimDaliOptions(anabilimData);
+    } catch (error) {
+      console.error("Dropdown seçenekleri çekilirken hata:", error);
+    }
   };
 
   // --- Filtreleme ve Sıralama ---
@@ -198,54 +220,38 @@ const handleChange = (e) => {
 };
 
 const handleSave = async (e) => {
-  e.preventDefault(); setFormError(''); setSubmitting(true);
-  const csrftoken = getCookie('csrftoken');
-  if (!csrftoken) { setFormError("Güvenlik token'ı alınamadı."); setSubmitting(false); return; }
+  e.preventDefault();
+  setFormError('');
+  setSubmitting(true);
 
-  const payload = {
-      baslik: form.baslik, aciklama: form.aciklama, aktif: form.aktif,
+  try {
+    const payload = {
+      baslik: form.baslik,
+      aciklama: form.aciklama,
+      aktif: form.aktif,
       kadro_tipi: form.kadro_tipi ? parseInt(form.kadro_tipi, 10) : null,
       birim: form.birim ? parseInt(form.birim, 10) : null,
       bolum: form.bolum ? parseInt(form.bolum, 10) : null,
       anabilim_dali: form.anabilim_dali ? parseInt(form.anabilim_dali, 10) : null,
-      baslangic_tarihi: form.baslangic_tarihi || null, // Boşsa null gönder
-      bitis_tarihi: form.bitis_tarihi || null,     // Boşsa null gönder
-      // olusturan_id backend'de request.user'dan alınmalı
-  };
-  // Tarihleri backend'in beklediği tam datetime formatına çevirmek gerekebilir
-  // if (payload.baslangic_tarihi) payload.baslangic_tarihi = new Date(payload.baslangic_tarihi).toISOString();
-  // if (payload.bitis_tarihi) payload.bitis_tarihi = new Date(payload.bitis_tarihi).toISOString();
+      baslangic_tarihi: form.baslangic_tarihi || null,
+      bitis_tarihi: form.bitis_tarihi || null,
+    };
 
+    if (editMode) {
+      await advertisementService.update(form.id, payload);
+    } else {
+      await advertisementService.create(payload);
+    }
 
-  const method = editMode ? 'PATCH' : 'POST';
-  const url = editMode ? `http://localhost:8000/api/ilanlar/${form.id}/` : 'http://localhost:8000/api/ilanlar/';
-
-  try {
-      const response = await fetch(url, {
-          method: method, headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrftoken },
-          credentials: 'include', body: JSON.stringify(payload)
-      });
-      // Başarısızsa ve JSON değilse text olarak oku
-      if (!response.ok) {
-           let errorData; try { errorData = await response.json(); } catch { errorData = await response.text(); }
-           throw { status: response.status, data: errorData }; // Hata objesi fırlat
-      }
-       // Başarılıysa
-       const responseData = await response.json(); // Yeni veya güncellenmiş ilanı al
-       alert(`İlan başarıyla ${editMode ? 'güncellendi' : 'oluşturuldu'}!`);
-       closeModal(); fetchUsers(); // Listeyi yenile
-
-  } catch(err) {
-       console.error(`İlan ${editMode ? 'güncelleme' : 'kaydetme'} hatası:`, err);
-       let errorMsg = `Hata (${err.status || 'Network Error'}): ${editMode ? 'Güncellenemedi' : 'Oluşturulamadı'}. `;
-       if (err.data) { // Django'dan gelen validation hataları olabilir
-           for (const key in err.data) { errorMsg += `${key}: ${Array.isArray(err.data[key]) ? err.data[key].join(', ') : err.data[key]} `; }
-       } else if (err.message) {
-           errorMsg = err.message; // Genel hata mesajı
-       }
-       setFormError(errorMsg.trim());
-   }
-  finally { setSubmitting(false); }
+    alert(`İlan başarıyla ${editMode ? 'güncellendi' : 'oluşturuldu'}!`);
+    closeModal();
+    fetchIlanlar();
+  } catch (err) {
+    console.error(`İlan ${editMode ? 'güncelleme' : 'kaydetme'} hatası:`, err);
+    setFormError(err.response?.data?.detail || "İşlem sırasında bir hata oluştu");
+  } finally {
+    setSubmitting(false);
+  }
 };
 
   // --- Render ---

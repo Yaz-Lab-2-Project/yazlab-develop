@@ -1,17 +1,28 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 
-// https://vitejs.dev/config/
 export default defineConfig({
   plugins: [react()],
   server: {
     proxy: {
-      // /api ile başlayan istekleri http://127.0.0.1:8000'e yönlendir
+      // /api ile başlayan istekleri backend'e yönlendir
       '/api': {
-        target: 'http://127.0.0.1:8000', // Backend adresiniz
-        changeOrigin: true, // Önerilir
-        // secure: false, // Eğer backend https ve sertifika sorunlu ise
-      }
-    }
-  }
+        target: 'http://127.0.0.1:8000',
+        changeOrigin: true,
+        // secure: false, // HTTPS + self-signed sertifika ise açılabilir
+      },
+    },
+  },
+  build: {
+    outDir: 'dist',
+    assetsDir: 'assets',
+    emptyOutDir: true,
+    rollupOptions: {
+      output: {
+        manualChunks: undefined,
+      },
+    },
+  },
+  // Base URL boş, tüm yollar göreceli => index.html'de <link href="assets/…"> olarak kullanılır
+  base: '',
 })

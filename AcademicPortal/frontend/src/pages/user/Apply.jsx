@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
-import { useParams, useNavigate } from "react-router-dom"; // useParams ve useNavigate import edin
+import { useParams } from "react-router-dom"; // useParams ve useNavigate import edin
 import UserNavbar from "../../components/navbars/UserNavbar";
-import { useAuth } from "../../context/AuthContext"; // AuthContext'i import edin
+import api from '../../services/api';
 
 // CSRF token'ı almak için getCookie fonksiyonu (AuthContext'ten veya global olarak import edilebilir)
 function getCookie(name) {
@@ -24,9 +24,6 @@ function getCookie(name) {
 
 const Apply = () => {
   const { ilanId } = useParams(); // URL'den ilanId'yi al
-  const { user } = useAuth(); // Giriş yapmış kullanıcıyı Context'ten al
-  const navigate = useNavigate();
-
   const [announcement, setAnnouncement] = useState(null); // İlan detayları
   const [requiredDocs, setRequiredDocs] = useState([]); // Backend'den gelen gerekli belgeler listesi
   const [applicationData, setApplicationData] = useState({}); // Yüklenecek dosyaları tutacak state {docKey: File}
@@ -39,48 +36,32 @@ const Apply = () => {
   // İlan detaylarını çekme
   useEffect(() => {
     if (!ilanId) return;
-
     setLoading(true);
     setError(null);
-    fetch(`http://localhost:8000/api/ilanlar/${ilanId}/`, { credentials: 'include' })
+    api.get(`/ilanlar/${ilanId}/`)
       .then(res => {
-        if (!res.ok) {
-          throw new Error(`İlan detayı alınamadı (${res.status})`);
-        }
-        return res.json();
-      })
-      .then(data => {
+        const data = res.data;
         setAnnouncement(data);
         // ===> Backend'den Gelen Gerekli Belge Listesi <===
-        // Backend ilan detayında gerekli belgelerin listesini nasıl döndürüyor?
-        // Varsayım: data.gerekli_belgeler_listesi gibi bir alan var
-        // VEYA kadro_tipi'ne göre kriterlerden almanız gerekebilir.
-        // Şimdilik örnek bir liste kullanıyoruz, burayı backend yanıtınıza göre GÜNCELLEYİN!
-        // Örneğin: Özgeçmiş, Diploma, Yabancı Dil Belgesi backend model field isimleri olabilir.
         const backendRequiredDocs = [
             { key: 'ozgecmis_dosyasi', label: 'Özgeçmiş Dosyası' },
             { key: 'diploma_belgeleri', label: 'Diploma Belgeleri' },
             { key: 'yabanci_dil_belgesi', label: 'Yabancı Dil Belgesi' },
-            // ... ilana veya kadro tipine göre backend'den gelen diğer belgeler ...
-            // Örnek: { key: 'yaygin_yayim', label: 'Yaygın Yayım Kanıtı'}
         ];
         setRequiredDocs(backendRequiredDocs);
-        // Gerekli belgeler için applicationData state'ini başlangıçta boş File nesneleriyle doldur
         const initialDocState = {};
         backendRequiredDocs.forEach(doc => {
-            initialDocState[doc.key] = null; // Başlangıçta dosya yok
+            initialDocState[doc.key] = null;
         });
         setApplicationData(initialDocState);
-
       })
       .catch(err => {
-        console.error("İlan detayı çekme hatası:", err);
         setError(err.message);
       })
       .finally(() => {
         setLoading(false);
       });
-  }, [ilanId]); // ilanId değiştiğinde tekrar çalışır
+  }, [ilanId]);
 
   // Dosya seçildiğinde state'i güncelle
   const handleFileChange = (e, docKey) => {
@@ -132,41 +113,14 @@ const Apply = () => {
       console.log(key, value);
     }
 
-
     try {
-      const response = await fetch('http://localhost:8000/api/basvurular/', {
-        method: 'POST',
-        headers: {
-          // 'Content-Type': 'multipart/form-data', // FormData kullanırken BUNU AYARLAMAYIN! Tarayıcı otomatik yapar.
-          'X-CSRFToken': csrftoken
-        },
-        credentials: 'include',
-        body: formData // FormData nesnesini gönder
+      await api.post('/basvurular/', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' }
       });
-
-      if (response.ok) {
-        // Başvuru başarılı
-        setSubmitted(true);
-        setShowForm(false); // Formu gizle
-        console.log("Başvuru başarıyla gönderildi!");
-      } else {
-        // Başvuru hatası
-        const errorData = await response.json();
-        console.error("Başvuru gönderme hatası:", errorData);
-        // Backend'den gelen detaylı hata mesajlarını göstermeye çalış
-        let errorMsg = `Hata (${response.status}): Başvuru gönderilemedi. `;
-        for (const key in errorData) {
-            if (Array.isArray(errorData[key])) {
-                errorMsg += `${key}: ${errorData[key].join(', ')} `;
-            } else {
-                errorMsg += `${key}: ${errorData[key]} `;
-            }
-        }
-        setError(errorMsg.trim());
-      }
+      setSubmitted(true);
+      setShowForm(false);
     } catch (err) {
-      console.error("Başvuru isteği sırasında hata:", err);
-      setError("Başvuru gönderilirken bir ağ hatası oluştu.");
+      setError(err.message || "Başvuru gönderilirken bir ağ hatası oluştu.");
     } finally {
       setSubmitting(false);
     }

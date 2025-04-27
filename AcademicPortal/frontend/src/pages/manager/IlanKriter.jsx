@@ -4,7 +4,15 @@ import ManagerNavbar from "../../components/navbars/ManagerNavbar";
 
 function getAuthToken() {
     const token = localStorage.getItem("authToken");
-    // console.log("Retrieved Token:", token); // Debug
+    if (!token) {
+        // Token yoksa sessionStorage'dan kontrol et
+        const sessionToken = sessionStorage.getItem("authToken");
+        if (sessionToken) {
+            // SessionStorage'da varsa localStorage'a kaydet
+            localStorage.setItem("authToken", sessionToken);
+            return sessionToken;
+        }
+    }
     return token;
 }
 
@@ -28,63 +36,68 @@ async function fetchWithAuth(url, options = {}) {
   const token = getAuthToken();
   const csrfToken = getCookie('csrftoken');
 
-  if (!token && !options.allowUnauthenticated) { // Allow specific calls without token if needed
-      console.error("Authentication Token not found.");
-      const error = new Error("Giriş bilgileri bulunamadı (Token eksik). Lütfen tekrar giriş yapın.");
-      error.status = 401;
-      throw error;
-  }
-
-  const headers = { ...options.headers };
+  // Token kontrolünü kaldır, sadece header'a ekle
+  const headers = {
+    'Accept': 'application/json',
+    ...options.headers
+  };
 
   if (token) {
-      headers['Authorization'] = `Token ${token}`; // Or `Bearer ${token}`
+    headers['Authorization'] = `Token ${token}`;
   }
 
   if (options.body && !(options.body instanceof FormData)) {
-      headers['Content-Type'] = 'application/json';
+    headers['Content-Type'] = 'application/json';
   }
 
   if (csrfToken && ['POST', 'PUT', 'PATCH', 'DELETE'].includes(options.method?.toUpperCase())) {
-      headers['X-CSRFToken'] = csrfToken;
+    headers['X-CSRFToken'] = csrfToken;
   }
 
-  const response = await fetch(url, { ...options, headers });
+  try {
+    // URL'nin başında / yoksa ekle
+    const formattedUrl = url.startsWith('/') ? url : `/${url}`;
+    
+    const response = await fetch(formattedUrl, { 
+      ...options, 
+      headers,
+      credentials: 'include'
+    });
 
-  if (!response.ok) {
+    if (!response.ok) {
       let errorData;
       let errorMessage = `Request failed with status ${response.status}`;
       try {
-          errorData = await response.json();
-          errorMessage = errorData.detail || (typeof errorData === 'string' ? errorData : JSON.stringify(errorData)) || errorMessage;
-      } catch (e) {
-          errorMessage = response.statusText || errorMessage;
+        errorData = await response.json();
+        errorMessage = errorData.detail || (typeof errorData === 'string' ? errorData : JSON.stringify(errorData)) || errorMessage;
+      } catch (response) {
+        errorMessage = response.statusText || errorMessage;
       }
 
       if (response.status === 401) {
-          errorMessage = "Kimlik doğrulaması başarısız (401). Token geçersiz veya eksik.";
+        // 401 hatası durumunda token'ı temizle ve login sayfasına yönlendir
+        localStorage.removeItem("authToken");
+        sessionStorage.removeItem("authToken");
+        window.location.href = '/login';
+        errorMessage = "Oturum süreniz doldu. Lütfen tekrar giriş yapın.";
       } else if (response.status === 403) {
-          errorMessage = "Bu kaynağa erişim yetkiniz yok (403 Forbidden).";
+        errorMessage = "Bu kaynağa erişim yetkiniz yok (403 Forbidden).";
       } else if (response.status === 404) {
-          errorMessage = "Kaynak bulunamadı (404 Not Found).";
+        errorMessage = "Kaynak bulunamadı (404 Not Found).";
       }
-
 
       const error = new Error(errorMessage);
       error.status = response.status;
       error.data = errorData;
       console.error(`API Error (${response.status}) for ${url}:`, errorMessage, errorData);
       throw error;
-  }
+    }
 
-  if (response.status === 204) return null;
-  try {
-      return await response.json();
-  } catch (e) {
-      console.error("Failed to parse JSON response for", url, e);
-      const error = new Error("Sunucudan gelen yanıt işlenemedi (JSON parse hatası).");
-      error.status = response.status;
-      throw error;
+    if (response.status === 204) return null;
+    return await response.json();
+  } catch (error) {
+    console.error("API request failed:", error);
+    throw error;
   }
 }
 
@@ -92,7 +105,10 @@ const IlanKriter = () => {
   const { id: ilanId } = useParams(); // URL'den ilan ID'sini al
   const navigate = useNavigate();
 
-  // İlkin component’in en üstünde
+  // Tab state'i ekle
+  const [activeTab, setActiveTab] = useState('criteria'); // 'criteria' veya 'jury'
+
+  // İlkin component'in en üstünde
 const [searchTC, setSearchTC] = useState('');
 const [juriResults, setJuriResults] = useState([]);
 const [assignedJuries, setAssignedJuries] = useState([]);
@@ -282,82 +298,48 @@ const [errorJuri, setErrorJuri] = useState(null);
 
   // Kriter Kaydetme/Güncelleme Fonksiyonu
   const handleSaveCriteria = async () => {
-    if (!selectedKadroTipiId || !selectedTemelAlanId) {
-      setErrorCriteria("Lütfen Kadro Türü ve Temel Alan seçin.");
-      return;
+    try {
+      setSaving(true);
+      setErrorCriteria(null);
+      setSuccessMessage('');
+
+      const criteriaData = {
+        temel_alan: selectedTemelAlanId,
+        kadro_tipi: selectedKadroTipiId,
+        min_toplam_puan: minToplamPuan,
+        min_makale_sayisi: minMakaleSayisi,
+        min_baslica_yazar: minBaslicaYazar,
+        min_a1a2_makale: minA1A2Makale,
+        min_a1a4_makale: minA1A4Makale,
+        min_a1a5_makale: minA1A5Makale,
+        min_a1a6_makale: minA1A6Makale,
+        min_a1a8_makale: minA1A8Makale,
+        min_kisisel_etkinlik: minKisiselEtkinlik,
+        min_karma_etkinlik: minKarmaEtkinlik,
+        min_tez_danismanligi: minTezDanismanligi,
+        ozel_kriterler: customCriteria
+      };
+
+      const response = await fetchWithAuth(
+        '/api/atama-kriteri/',
+        {
+          method: 'POST',  // Her zaman POST kullanıyoruz
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(criteriaData)
+        }
+      );
+
+      setSuccessMessage('Kriterler başarıyla kaydedildi');
+      // Başarılı kayıt sonrası state'i güncelle
+      setCriteriaId(response.id);
+    } catch (error) {
+      console.error('Kriter kaydetme hatası:', error);
+      setErrorCriteria(error.message || 'Kriterler kaydedilirken bir hata oluştu');
+    } finally {
+      setSaving(false);
     }
-
-    setErrorCriteria(null);
-    setSuccessMessage('');
-    setSaving(true);
-
-    const csrftoken = getCookie('csrftoken'); // CSRF token'ını al
-
-    // API'ye gönderilecek payload
-    const payload = {
-      kadro_tipi: parseInt(selectedKadroTipiId, 10),
-      temel_alan: parseInt(selectedTemelAlanId, 10),
-      min_toplam_puan: minToplamPuan,
-      min_makale_sayisi: minMakaleSayisi,
-      min_baslica_yazar: minBaslicaYazar,
-      min_a1_a2_makale: minA1A2Makale,
-      min_a1_a4_makale: minA1A4Makale,
-      min_a1_a5_makale: minA1A5Makale,
-      min_a1_a6_makale: minA1A6Makale,
-      min_a1_a8_makale: minA1A8Makale,
-      min_kisisel_etkinlik: minKisiselEtkinlik,
-      min_karma_etkinlik: minKarmaEtkinlik,
-      min_tez_danismanligi: minTezDanismanligi,
-      // Özel kriterler backend'e nasıl gönderilecekse ona göre formatlanmalı
-      // Örnek: [{ ad: '...', deger: ... }, ...] veya ID listesi vb.
-       ozel_kriterler: customCriteria.map(c => ({ ad: c.name, deger: c.value })) // Backend modeline göre ayarlayın (name->ad, value->deger)
-    };
-
-    // API endpoint ve metot (POST veya PUT)
-    const url = criteriaId
-    ? `http://localhost:8000/api/atama-kriterleri/${criteriaId}/`
-    : `http://localhost:8000/api/atama-kriterleri/`;
-const method = criteriaId ? 'PUT' : 'POST';
-
-    fetch(url, {
-      method: method,
-      headers: {
-        'Content-Type': 'application/json',
-        'X-CSRFToken': csrftoken, // CSRF token'ını header'a ekle
-         'Accept': 'application/json',
-      },
-       credentials: 'include', // Cookie'leri göndermek için
-      body: JSON.stringify(payload),
-    })
-    .then(res => {
-      if (!res.ok) {
-          // Hata detayını almak için response body'sini okumaya çalış
-          return res.json().then(errData => {
-              // Backend'den gelen hata mesajını formatla
-              const errorMsg = Object.entries(errData)
-                  .map(([key, value]) => `${key}: ${Array.isArray(value) ? value.join(', ') : value}`)
-                  .join('; ');
-              throw new Error(errorMsg || `Kriterler kaydedilemedi (${res.status})`);
-          }).catch(() => {
-              // JSON parse edilemezse genel hata
-              throw new Error(`Kriterler kaydedilemedi (${res.status})`);
-          });
-      }
-      return res.json();
-    })
-    .then(data => {
-      setSuccessMessage("Kriterler başarıyla kaydedildi!");
-      setCriteriaId(data.id); // Yeni veya güncellenen kriterin ID'sini al
-      // Özel kriterler backend'den ID ile dönüyorsa güncellenmeli
-      if (data.ozel_kriterler) {
-          setCustomCriteria(data.ozel_kriterler); // Backend'den gelen güncel özel kriter listesi
-      }
-      setSaving(false);
-    })
-    .catch(err => {
-      setErrorCriteria(`Kaydetme hatası: ${err.message}`);
-      setSaving(false);
-    });
   };
 
 
@@ -367,8 +349,8 @@ const handleSearchJuri = async () => {
   setErrorJuri(null);
   try {
     const data = await fetchWithAuth(
-      `/api/users/?TC_KIMLIK=${searchTC}`,
-      { method: 'GET', allowUnauthenticated: true }
+      `http://localhost:8000/api/users/?TC_KIMLIK=${searchTC}`,
+      { method: 'GET' }
     );
     setJuriResults(data);
   } catch (e) {
@@ -486,263 +468,584 @@ const handleAssignJuri = async (userId) => {
 
         {/* İlan Bilgileri Paneli */}
         <div className="selected-announcement-panel">
-          <h2>{IlanKriter.baslik}</h2> {/* Backend'den gelen alana göre düzeltin */}
+          <h2>{IlanKriter.baslik}</h2>
           <div className="announcement-details">
-            {/* Backend'den gelen diğer ilan detaylarını buraya ekleyin */}
-             <p><strong>Departman:</strong> {IlanKriter.departman?.ad || 'Belirtilmemiş'}</p>
-             <p><strong>Kadro Tipi:</strong> {kadroTipiOptions.find(k => k.id === parseInt(IlanKriter.kadro_tipi))?.tip || 'Belirtilmemiş'}</p>
-             <p><strong>Temel Alan:</strong> {temelAlanOptions.find(t => t.id === parseInt(IlanKriter.temel_alan))?.ad || 'Belirtilmemiş'}</p>
-             <p><strong>Başlangıç:</strong> {IlanKriter.baslangic_tarihi || 'Belirtilmemiş'}</p>
-             <p><strong>Bitiş:</strong> {IlanKriter.bitis_tarihi || 'Belirtilmemiş'}</p>
-             <p><strong>Açıklama:</strong> {IlanKriter.aciklama || 'Yok'}</p>
+            <p><strong>Departman:</strong> {IlanKriter.departman?.ad || 'Belirtilmemiş'}</p>
+            <p><strong>Kadro Tipi:</strong> {kadroTipiOptions.find(k => k.id === parseInt(IlanKriter.kadro_tipi))?.tip || 'Belirtilmemiş'}</p>
+            <p><strong>Temel Alan:</strong> {temelAlanOptions.find(t => t.id === parseInt(IlanKriter.temel_alan))?.ad || 'Belirtilmemiş'}</p>
+            <p><strong>Başlangıç:</strong> {IlanKriter.baslangic_tarihi || 'Belirtilmemiş'}</p>
+            <p><strong>Bitiş:</strong> {IlanKriter.bitis_tarihi || 'Belirtilmemiş'}</p>
+            <p><strong>Açıklama:</strong> {IlanKriter.aciklama || 'Yok'}</p>
           </div>
-           <button className="back-button top-back-button" onClick={handleGoBack}>
-             İlan Listesine Dön
-           </button>
+          <button className="back-button top-back-button" onClick={handleGoBack}>
+            İlan Listesine Dön
+          </button>
+        </div>
+
+        {/* Tab Navigation */}
+        <div className="tab-navigation">
+          <button 
+            className={`tab-button ${activeTab === 'criteria' ? 'active' : ''}`}
+            onClick={() => setActiveTab('criteria')}
+          >
+            İlan Kriter Düzenlemesi
+          </button>
+          <button 
+            className={`tab-button ${activeTab === 'jury' ? 'active' : ''}`}
+            onClick={() => setActiveTab('jury')}
+          >
+            Jüri Atama
+          </button>
         </div>
 
         {/* Durum Mesajları */}
         {successMessage &&
           <div className="success-message">{successMessage}</div>
         }
-        {errorCriteria && !successMessage && // Sadece kriter hatası varsa göster
+        {errorCriteria && !successMessage &&
           <div className="error-message">{errorCriteria}</div>
         }
 
-        {/* Kriter Yönetimi Bölümü */}
-        <div className="card">
-          <h2 className="section-title">İlan Kriterleri</h2>
-
-          {loadingOptions ? (
+        {/* Tab İçerikleri */}
+        {activeTab === 'criteria' && (
+          <div className="card">
+            <h2 className="section-title">İlan Kriterleri</h2>
+            {/* Mevcut kriter yönetimi içeriği */}
+            {loadingOptions ? (
               <div className="loading-message">Seçenekler yükleniyor...</div>
-          ) : (
-            <div className="criteria-selection">
-              <div className="form-group">
-                <label htmlFor="kadroTipiSelect">Kadro Türü</label>
-                <select
-                  id="kadroTipiSelect"
-                  className="select-input"
-                  value={selectedKadroTipiId || ''}
-                  onChange={(e) => setSelectedKadroTipiId(e.target.value)}
-                  disabled={loadingCriteria || saving} // Seçenekler yüklendikten sonra aktif
-                >
-                  <option value="" disabled>-- Seçiniz --</option>
-                  {kadroTipiOptions.map(option => (
-                    // Backend ID'leri string ise 'option.id.toString()' kullanın
-                    <option key={option.id} value={option.id}>{option.tip}</option>
-                  ))}
-                </select>
-              </div>
-
-              <div className="form-group">
-                <label htmlFor="temelAlanSelect">Temel Alan</label>
-                <select
-                  id="temelAlanSelect"
-                  className="select-input"
-                  value={selectedTemelAlanId || ''}
-                  onChange={(e) => setSelectedTemelAlanId(e.target.value)}
-                  disabled={loadingCriteria || saving} // Seçenekler yüklendikten sonra aktif
-                >
-                  <option value="" disabled>-- Seçiniz --</option>
-                  {temelAlanOptions.map(option => (
-                    // Backend ID'leri string ise 'option.id.toString()' kullanın
-                    <option key={option.id} value={option.id}>{option.ad}</option>
-                  ))}
-                </select>
-              </div>
-            </div>
-           )}
-
-          {loadingCriteria && (
-            <div className="loading-message">Kriterler yükleniyor...</div>
-          )}
-
-          {!loadingCriteria && selectedKadroTipiId && selectedTemelAlanId && (
-            <>
-              <h3 className="subsection-title">Minimum Kriterler</h3>
-              <div className="criteria-grid">
-                {/* Inputlar (AnnouncementsPage'den kopyalandı) */}
-                 <div className="form-group">
-                     <label>Toplam Puan</label>
-                     <input type="number" className="number-input" value={minToplamPuan} onChange={(e) => setMinToplamPuan(Number(e.target.value) || 0)} disabled={saving}/>
-                 </div>
-                 <div className="form-group">
-                     <label>Makale Sayısı</label>
-                     <input type="number" className="number-input" value={minMakaleSayisi} onChange={(e) => setMinMakaleSayisi(Number(e.target.value) || 0)} disabled={saving}/>
-                 </div>
-                 <div className="form-group">
-                     <label>Başlıca Yazar</label>
-                     <input type="number" className="number-input" value={minBaslicaYazar} onChange={(e) => setMinBaslicaYazar(Number(e.target.value) || 0)} disabled={saving}/>
-                 </div>
-                 <div className="form-group">
-                     <label>A1-A2 Makale</label>
-                     <input type="number" className="number-input" value={minA1A2Makale} onChange={(e) => setMinA1A2Makale(Number(e.target.value) || 0)} disabled={saving}/>
-                 </div>
-                 <div className="form-group">
-                     <label>A1-A4 Makale</label>
-                     <input type="number" className="number-input" value={minA1A4Makale} onChange={(e) => setMinA1A4Makale(Number(e.target.value) || 0)} disabled={saving}/>
-                 </div>
-                 <div className="form-group">
-                     <label>A1-A5 Makale</label>
-                     <input type="number" className="number-input" value={minA1A5Makale} onChange={(e) => setMinA1A5Makale(Number(e.target.value) || 0)} disabled={saving}/>
-                 </div>
-                 <div className="form-group">
-                     <label>A1-A6 Makale</label>
-                     <input type="number" className="number-input" value={minA1A6Makale} onChange={(e) => setMinA1A6Makale(Number(e.target.value) || 0)} disabled={saving}/>
-                 </div>
-                 <div className="form-group">
-                     <label>A1-A8 Makale</label>
-                     <input type="number" className="number-input" value={minA1A8Makale} onChange={(e) => setMinA1A8Makale(Number(e.target.value) || 0)} disabled={saving}/>
-                 </div>
-                 <div className="form-group">
-                     <label>Kişisel Etkinlik</label>
-                     <input type="number" className="number-input" value={minKisiselEtkinlik} onChange={(e) => setMinKisiselEtkinlik(Number(e.target.value) || 0)} disabled={saving}/>
-                 </div>
-                 <div className="form-group">
-                     <label>Karma Etkinlik</label>
-                     <input type="number" className="number-input" value={minKarmaEtkinlik} onChange={(e) => setMinKarmaEtkinlik(Number(e.target.value) || 0)} disabled={saving}/>
-                 </div>
-                 <div className="form-group">
-                     <label>Tez Danışmanlığı</label>
-                     <input type="number" className="number-input" value={minTezDanismanligi} onChange={(e) => setMinTezDanismanligi(Number(e.target.value) || 0)} disabled={saving}/>
-                 </div>
-              </div>
-
-              <h3 className="subsection-title">Özel Kriterler</h3>
-              <div className="custom-criteria-section">
-                {customCriteria.length > 0 ? (
-                  <div className="custom-criteria-list">
-                    {customCriteria.map((criterion) => (
-                      // Backend'den gelen ID'yi kullanın (criterion.id)
-                      // Backend'den ad/deger alan isimleri farklıysa düzeltin (criterion.ad, criterion.deger)
-                      <div key={criterion.id || `criterion-${criterion.name}`} className="custom-criterion-item">
-                        <span className="criterion-name">{criterion.name || criterion.ad}</span>
-                        <span className="criterion-value">{criterion.value ?? criterion.deger}</span>
-                        <button
-                          className="remove-button"
-                          onClick={() => handleRemoveCustomCriterion(criterion.id)}
-                          disabled={saving}
-                        >
-                          Sil
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <p className="no-criteria-message">Henüz özel kriter eklenmemiş.</p>
-                )}
-
-                <div className="add-criterion-form">
-                  <input
-                    type="text"
-                    placeholder="Özel Kriter Adı"
-                    className="text-input"
-                    value={newCriterionName}
-                    onChange={(e) => setNewCriterionName(e.target.value)}
-                     disabled={saving}
-                  />
-                  <input
-                    type="number"
-                    placeholder="Minimum Değer"
-                    className="number-input"
-                    value={newCriterionValue}
-                    onChange={(e) => setNewCriterionValue(Number(e.target.value) || 0)}
-                     disabled={saving}
-                  />
-                  <button
-                    className="add-button"
-                    onClick={handleAddCustomCriterion}
-                     disabled={saving}
+            ) : (
+              <div className="criteria-selection">
+                <div className="form-group">
+                  <label htmlFor="kadroTipiSelect">Kadro Türü</label>
+                  <select
+                    id="kadroTipiSelect"
+                    className="select-input"
+                    value={selectedKadroTipiId || ''}
+                    onChange={(e) => setSelectedKadroTipiId(e.target.value)}
+                    disabled={loadingCriteria || saving} // Seçenekler yüklendikten sonra aktif
                   >
-                    Ekle
-                  </button>
+                    <option value="" disabled>-- Seçiniz --</option>
+                    {kadroTipiOptions.map(option => (
+                      // Backend ID'leri string ise 'option.id.toString()' kullanın
+                      <option key={option.id} value={option.id}>{option.tip}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="form-group">
+                  <label htmlFor="temelAlanSelect">Temel Alan</label>
+                  <select
+                    id="temelAlanSelect"
+                    className="select-input"
+                    value={selectedTemelAlanId || ''}
+                    onChange={(e) => setSelectedTemelAlanId(e.target.value)}
+                    disabled={loadingCriteria || saving} // Seçenekler yüklendikten sonra aktif
+                  >
+                    <option value="" disabled>-- Seçiniz --</option>
+                    {temelAlanOptions.map(option => (
+                      // Backend ID'leri string ise 'option.id.toString()' kullanın
+                      <option key={option.id} value={option.id}>{option.ad}</option>
+                    ))}
+                  </select>
                 </div>
               </div>
+            )}
 
-              <div className="form-actions">
-                <button
-                  className="primary-button"
-                  onClick={handleSaveCriteria}
-                  disabled={saving || loadingCriteria} // Kaydederken veya kriter yüklenirken deaktif
-                >
-                  {saving ? 'Kaydediliyor...' : (criteriaId ? 'Kriterleri Güncelle' : 'Kriterleri Kaydet')}
-                </button>
-              </div>
+            {loadingCriteria && (
+              <div className="loading-message">Kriterler yükleniyor...</div>
+            )}
 
-{/* --- JÜRİ ATAMA BÖLÜMÜ --- */}
-<div className="card">
-  <h2 className="section-title">Jüri Atama</h2>
+            {!loadingCriteria && selectedKadroTipiId && selectedTemelAlanId && (
+              <>
+                <h3 className="subsection-title">Minimum Kriterler</h3>
+                <div className="criteria-grid">
+                  {/* Inputlar (AnnouncementsPage'den kopyalandı) */}
+                   <div className="form-group">
+                       <label>Toplam Puan</label>
+                       <input type="number" className="number-input" value={minToplamPuan} onChange={(e) => setMinToplamPuan(Number(e.target.value) || 0)} disabled={saving}/>
+                   </div>
+                   <div className="form-group">
+                       <label>Makale Sayısı</label>
+                       <input type="number" className="number-input" value={minMakaleSayisi} onChange={(e) => setMinMakaleSayisi(Number(e.target.value) || 0)} disabled={saving}/>
+                   </div>
+                   <div className="form-group">
+                       <label>Başlıca Yazar</label>
+                       <input type="number" className="number-input" value={minBaslicaYazar} onChange={(e) => setMinBaslicaYazar(Number(e.target.value) || 0)} disabled={saving}/>
+                   </div>
+                   <div className="form-group">
+                       <label>A1-A2 Makale</label>
+                       <input type="number" className="number-input" value={minA1A2Makale} onChange={(e) => setMinA1A2Makale(Number(e.target.value) || 0)} disabled={saving}/>
+                   </div>
+                   <div className="form-group">
+                       <label>A1-A4 Makale</label>
+                       <input type="number" className="number-input" value={minA1A4Makale} onChange={(e) => setMinA1A4Makale(Number(e.target.value) || 0)} disabled={saving}/>
+                   </div>
+                   <div className="form-group">
+                       <label>A1-A5 Makale</label>
+                       <input type="number" className="number-input" value={minA1A5Makale} onChange={(e) => setMinA1A5Makale(Number(e.target.value) || 0)} disabled={saving}/>
+                   </div>
+                   <div className="form-group">
+                       <label>A1-A6 Makale</label>
+                       <input type="number" className="number-input" value={minA1A6Makale} onChange={(e) => setMinA1A6Makale(Number(e.target.value) || 0)} disabled={saving}/>
+                   </div>
+                   <div className="form-group">
+                       <label>A1-A8 Makale</label>
+                       <input type="number" className="number-input" value={minA1A8Makale} onChange={(e) => setMinA1A8Makale(Number(e.target.value) || 0)} disabled={saving}/>
+                   </div>
+                   <div className="form-group">
+                       <label>Kişisel Etkinlik</label>
+                       <input type="number" className="number-input" value={minKisiselEtkinlik} onChange={(e) => setMinKisiselEtkinlik(Number(e.target.value) || 0)} disabled={saving}/>
+                   </div>
+                   <div className="form-group">
+                       <label>Karma Etkinlik</label>
+                       <input type="number" className="number-input" value={minKarmaEtkinlik} onChange={(e) => setMinKarmaEtkinlik(Number(e.target.value) || 0)} disabled={saving}/>
+                   </div>
+                   <div className="form-group">
+                       <label>Tez Danışmanlığı</label>
+                       <input type="number" className="number-input" value={minTezDanismanligi} onChange={(e) => setMinTezDanismanligi(Number(e.target.value) || 0)} disabled={saving}/>
+                   </div>
+                </div>
 
-  {/* TC Kimlik Arama */}
-  <div className="form-group" style={{ display: 'flex', gap: 8 }}>
-    <input
-      type="text"
-      placeholder="TC Kimlik No"
-      value={searchTC}
-      onChange={e => setSearchTC(e.target.value)}
-      className="text-input"
-      disabled={loadingSearch || loadingAssign}
-    />
-    <button
-      onClick={handleSearchJuri}
-      disabled={!searchTC || loadingSearch || loadingAssign}
-      className="primary-button"
-    >
-      {loadingSearch ? 'Aranıyor…' : 'Ara'}
-    </button>
-  </div>
-  {errorJuri && <div className="error-message">{errorJuri}</div>}
+                <h3 className="subsection-title">Özel Kriterler</h3>
+                <div className="custom-criteria-section">
+                  {customCriteria.length > 0 ? (
+                    <div className="custom-criteria-list">
+                      {customCriteria.map((criterion) => (
+                        // Backend'den gelen ID'yi kullanın (criterion.id)
+                        // Backend'den ad/deger alan isimleri farklıysa düzeltin (criterion.ad, criterion.deger)
+                        <div key={criterion.id || `criterion-${criterion.name}`} className="custom-criterion-item">
+                          <span className="criterion-name">{criterion.name || criterion.ad}</span>
+                          <span className="criterion-value">{criterion.value ?? criterion.deger}</span>
+                          <button
+                            className="remove-button"
+                            onClick={() => handleRemoveCustomCriterion(criterion.id)}
+                            disabled={saving}
+                          >
+                            Sil
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="no-criteria-message">Henüz özel kriter eklenmemiş.</p>
+                  )}
 
-  {/* Arama Sonuçları */}
-  {juriResults.length > 0 && (
-    <ul style={{ listStyle: 'none', padding: 0 }}>
-      {juriResults.map(user => (
-        <li key={user.id} style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
-          <span>
-            {user.first_name} {user.last_name} — {user.TC_KIMLIK}
-          </span>
-          <button
-            onClick={() => handleAssignJuri(user.id)}
-            disabled={loadingAssign}
-            className="add-button"
-          >
-            {loadingAssign ? 'Atanıyor…' : 'Ata'}
-          </button>
-        </li>
-      ))}
-    </ul>
-  )}
+                  <div className="add-criterion-form">
+                    <input
+                      type="text"
+                      placeholder="Özel Kriter Adı"
+                      className="text-input"
+                      value={newCriterionName}
+                      onChange={(e) => setNewCriterionName(e.target.value)}
+                       disabled={saving}
+                    />
+                    <input
+                      type="number"
+                      placeholder="Minimum Değer"
+                      className="number-input"
+                      value={newCriterionValue}
+                      onChange={(e) => setNewCriterionValue(Number(e.target.value) || 0)}
+                       disabled={saving}
+                    />
+                    <button
+                      className="add-button"
+                      onClick={handleAddCustomCriterion}
+                       disabled={saving}
+                    >
+                      Ekle
+                    </button>
+                  </div>
+                </div>
 
-  {/* Mevcut Atamalar */}
-  <h3 className="subsection-title">Mevcut Atamalar</h3>
-  {assignedJuries.length > 0 ? (
-    <ul style={{ listStyle: 'none', padding: 0 }}>
-      {assignedJuries.map(a => (
-        <li key={a.id} style={{ marginBottom: 4 }}>
-          Jüri Üyesi ID: {a.juri_uyesi} — Atama:{" "}
-          {new Date(a.atama_tarihi).toLocaleString("tr-TR", { day:"2-digit", month:"short", year:"numeric", hour:"2-digit", minute:"2-digit" })}
-        </li>
-      ))}
-    </ul>
-  ) : (
-    <p className="info-message">Henüz atama yapılmamış.</p>
-  )}
-</div>
-{/* --- JÜRİ ATAMA SONU --- */}
-
-
-            </>
-          )}
+                <div className="form-actions">
+                  <button
+                    className="primary-button"
+                    onClick={handleSaveCriteria}
+                    disabled={saving || loadingCriteria} // Kaydederken veya kriter yüklenirken deaktif
+                  >
+                    {saving ? 'Kaydediliyor...' : (criteriaId ? 'Kriterleri Güncelle' : 'Kriterleri Kaydet')}
+                  </button>
+                </div>
+              </>
+            )}
 
             {/* Kadro Tipi veya Temel Alan seçilmediyse mesaj */}
              {!loadingCriteria && (!selectedKadroTipiId || !selectedTemelAlanId) && (
                  <p className="info-message">Kriterleri görmek veya düzenlemek için lütfen Kadro Türü ve Temel Alan seçin.</p>
              )}
-        </div>
+          </div>
+        )}
+
+        {activeTab === 'jury' && (
+          <div className="card jury-card">
+            <h2 className="section-title">Jüri Atama</h2>
+            
+            <div className="jury-search-container">
+              <div className="search-box">
+                <input
+                  type="text"
+                  placeholder="TC Kimlik No ile ara..."
+                  value={searchTC}
+                  onChange={e => setSearchTC(e.target.value)}
+                  className="search-input"
+                  disabled={loadingSearch || loadingAssign}
+                />
+                <button
+                  onClick={handleSearchJuri}
+                  disabled={!searchTC || loadingSearch || loadingAssign}
+                  className="search-button"
+                >
+                  {loadingSearch ? (
+                    <span className="loading-spinner"></span>
+                  ) : (
+                    <span className="search-icon">🔍</span>
+                  )}
+                  {loadingSearch ? 'Aranıyor...' : 'Ara'}
+                </button>
+              </div>
+              
+              {errorJuri && <div className="error-message">{errorJuri}</div>}
+            </div>
+
+            {/* Arama Sonuçları */}
+            {juriResults.length > 0 && (
+              <div className="search-results">
+                <h3 className="subsection-title">Arama Sonuçları</h3>
+                <div className="results-list">
+                  {juriResults.map(user => (
+                    <div key={user.id} className="result-item">
+                      <div className="user-info">
+                        <span className="user-name">{user.first_name} {user.last_name}</span>
+                        <span className="user-tc">TC: {user.TC_KIMLIK}</span>
+                      </div>
+                      <button
+                        onClick={() => handleAssignJuri(user.id)}
+                        disabled={loadingAssign}
+                        className="assign-button"
+                      >
+                        {loadingAssign ? (
+                          <span className="loading-spinner small"></span>
+                        ) : (
+                          <span className="assign-icon">✓</span>
+                        )}
+                        {loadingAssign ? 'Atanıyor...' : 'Ata'}
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Mevcut Atamalar */}
+            <div className="assigned-juries">
+              <h3 className="subsection-title">Mevcut Jüri Atamaları</h3>
+              {assignedJuries.length > 0 ? (
+                <div className="assigned-list">
+                  {assignedJuries.map(a => (
+                    <div key={a.id} className="assigned-item">
+                      <div className="assigned-info">
+                        <span className="assigned-id">Jüri Üyesi ID: {a.juri_uyesi}</span>
+                        <span className="assigned-date">
+                          Atama: {new Date(a.atama_tarihi).toLocaleString("tr-TR", { 
+                            day: "2-digit", 
+                            month: "short", 
+                            year: "numeric", 
+                            hour: "2-digit", 
+                            minute: "2-digit" 
+                          })}
+                        </span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="no-assignments">
+                  <p>Henüz jüri ataması yapılmamış.</p>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Stil (AnnouncementsPage'den ilgili kısımlar alındı) */}
-      <style>{componentStyles}</style>
+      <style>{`
+        ${componentStyles}
+        
+        .tab-navigation {
+          display: flex;
+          gap: 1rem;
+          margin-bottom: 1.5rem;
+          border-bottom: 2px solid #eee;
+          padding-bottom: 0.5rem;
+        }
+
+        .tab-button {
+          padding: 0.75rem 1.5rem;
+          border: none;
+          background: none;
+          color: #666;
+          font-size: 1rem;
+          font-weight: 500;
+          cursor: pointer;
+          transition: all 0.2s;
+          border-radius: 4px;
+        }
+
+        .tab-button:hover {
+          background: #f0f0f0;
+        }
+
+        .tab-button.active {
+          background: #3498db;
+          color: white;
+        }
+
+        @media (max-width: 768px) {
+          .tab-navigation {
+            flex-direction: column;
+            gap: 0.5rem;
+          }
+
+          .tab-button {
+            width: 100%;
+            text-align: center;
+          }
+        }
+
+        /* Jüri Atama Stilleri */
+        .jury-card {
+          background: white;
+          border-radius: 12px;
+          box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+          padding: 2rem;
+          margin-bottom: 2rem;
+        }
+        
+        .jury-search-container {
+          margin-bottom: 2rem;
+        }
+        
+        .search-box {
+          display: flex;
+          gap: 0.75rem;
+          margin-bottom: 1rem;
+        }
+        
+        .search-input {
+          flex: 1;
+          padding: 0.875rem 1.25rem;
+          border: 1px solid #e0e0e0;
+          border-radius: 8px;
+          font-size: 1rem;
+          transition: all 0.2s;
+          box-shadow: 0 2px 5px rgba(0, 0, 0, 0.05);
+        }
+        
+        .search-input:focus {
+          border-color: #3498db;
+          box-shadow: 0 0 0 3px rgba(52, 152, 219, 0.2);
+          outline: none;
+        }
+        
+        .search-button {
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          gap: 0.5rem;
+          padding: 0.875rem 1.5rem;
+          background: #3498db;
+          color: white;
+          border: none;
+          border-radius: 8px;
+          font-weight: 500;
+          cursor: pointer;
+          transition: all 0.2s;
+          min-width: 120px;
+        }
+        
+        .search-button:hover:not(:disabled) {
+          background: #2980b9;
+          transform: translateY(-2px);
+          box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+        }
+        
+        .search-button:disabled {
+          background: #bdc3c7;
+          cursor: not-allowed;
+        }
+        
+        .search-icon {
+          font-size: 1.1rem;
+        }
+        
+        .loading-spinner {
+          display: inline-block;
+          width: 16px;
+          height: 16px;
+          border: 2px solid rgba(255, 255, 255, 0.3);
+          border-radius: 50%;
+          border-top-color: white;
+          animation: spin 1s ease-in-out infinite;
+        }
+        
+        .loading-spinner.small {
+          width: 12px;
+          height: 12px;
+          border-width: 1.5px;
+        }
+        
+        @keyframes spin {
+          to { transform: rotate(360deg); }
+        }
+        
+        .search-results {
+          margin-bottom: 2rem;
+        }
+        
+        .results-list {
+          display: flex;
+          flex-direction: column;
+          gap: 0.75rem;
+        }
+        
+        .result-item {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          padding: 1rem 1.25rem;
+          background: #f8f9fa;
+          border-radius: 8px;
+          border: 1px solid #e9ecef;
+          transition: all 0.2s;
+        }
+        
+        .result-item:hover {
+          background: #f1f3f5;
+          transform: translateY(-2px);
+          box-shadow: 0 4px 8px rgba(0, 0, 0, 0.05);
+        }
+        
+        .user-info {
+          display: flex;
+          flex-direction: column;
+          gap: 0.25rem;
+        }
+        
+        .user-name {
+          font-weight: 500;
+          color: #333;
+        }
+        
+        .user-tc {
+          font-size: 0.85rem;
+          color: #666;
+        }
+        
+        .assign-button {
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          gap: 0.5rem;
+          padding: 0.6rem 1.25rem;
+          background: #2ecc71;
+          color: white;
+          border: none;
+          border-radius: 6px;
+          font-weight: 500;
+          cursor: pointer;
+          transition: all 0.2s;
+        }
+        
+        .assign-button:hover:not(:disabled) {
+          background: #27ae60;
+          transform: translateY(-2px);
+          box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+        }
+        
+        .assign-button:disabled {
+          background: #bdc3c7;
+          cursor: not-allowed;
+        }
+        
+        .assign-icon {
+          font-size: 1rem;
+        }
+        
+        .assigned-juries {
+          margin-top: 2rem;
+        }
+        
+        .assigned-list {
+          display: flex;
+          flex-direction: column;
+          gap: 0.75rem;
+        }
+        
+        .assigned-item {
+          padding: 1rem 1.25rem;
+          background: #f8f9fa;
+          border-radius: 8px;
+          border: 1px solid #e9ecef;
+          transition: all 0.2s;
+        }
+        
+        .assigned-item:hover {
+          background: #f1f3f5;
+          transform: translateY(-2px);
+          box-shadow: 0 4px 8px rgba(0, 0, 0, 0.05);
+        }
+        
+        .assigned-info {
+          display: flex;
+          flex-direction: column;
+          gap: 0.25rem;
+        }
+        
+        .assigned-id {
+          font-weight: 500;
+          color: #333;
+        }
+        
+        .assigned-date {
+          font-size: 0.85rem;
+          color: #666;
+        }
+        
+        .no-assignments {
+          padding: 2rem;
+          text-align: center;
+          background: #f8f9fa;
+          border-radius: 8px;
+          border: 1px dashed #dee2e6;
+          color: #6c757d;
+          font-style: italic;
+        }
+        
+        @media (max-width: 768px) {
+          .jury-card {
+            padding: 1.5rem;
+          }
+          
+          .search-box {
+            flex-direction: column;
+          }
+          
+          .search-button {
+            width: 100%;
+          }
+          
+          .result-item {
+            flex-direction: column;
+            align-items: flex-start;
+            gap: 1rem;
+          }
+          
+          .assign-button {
+            width: 100%;
+          }
+        }
+      `}</style>
     </>
   );
 };
