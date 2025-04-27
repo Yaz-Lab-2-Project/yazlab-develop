@@ -1,7 +1,13 @@
 import axios from 'axios';
 
-// Birleştirilmiş sunucu için API URL'i
-const API_URL = '/api';
+const getBaseURL = () => {
+  // Eğer window.location.host 8000 ise, tam adres kullan
+  if (window.location.port === '8000') {
+    return 'http://127.0.0.1:8000/api';
+  }
+  // Geliştirme ortamı için proxy
+  return '/api';
+};
 
 function getCookie(name) {
     let cookieValue = null;
@@ -19,7 +25,7 @@ function getCookie(name) {
 }
 
 const api = axios.create({
-    baseURL: API_URL,
+    baseURL: getBaseURL(),
     headers: {
         'Content-Type': 'application/json',
     },
