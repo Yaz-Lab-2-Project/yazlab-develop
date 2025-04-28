@@ -6,6 +6,7 @@ import { FaFileAlt } from "react-icons/fa";
 // import { useNavigate } from "react-router-dom";
 import JuryNavbar from "../../components/navbars/JuryNavbar.jsx";
 // import { useAuth } from "../../context/AuthContext"; // Gerekirse
+import api from "../../services/api";
 
 // CSRF token'ı almak için getCookie fonksiyonu
 function getCookie(name) {
@@ -59,19 +60,18 @@ const Reviews = () => {
     setLoading(true);
     setError(null);
     // Backend'in jüri üyesine göre filtrelediğini varsayıyoruz
-    fetch('http://localhost:8000/api/juri-degerlendirmeler/?my_evaluations=true', { credentials: 'include' })
-      .then(res => {
-        if (!res.ok) throw new Error(`Değerlendirmeler alınamadı (${res.status})`);
-        return res.json();
-      })
-      .then(data => {
-        console.log("Gelen Değerlendirmeler:", data);
-        // Gelen yanıta göre (pagination varsa .results)
-        setEvaluationsData(data.results || data);
+    api.get('/juri-degerlendirmeler/?my_evaluations=true')
+      .then(response => {
+        console.log("Gelen Değerlendirmeler:", response.data);
+        // Gelen yanıtı array'e dönüştür
+        const evaluations = Array.isArray(response.data) ? response.data : 
+                          response.data.results ? response.data.results : [];
+        setEvaluationsData(evaluations);
       })
       .catch(err => {
         console.error("Değerlendirmeleri çekerken hata:", err);
         setError(err.message);
+        setEvaluationsData([]); // Hata durumunda boş array set et
       })
       .finally(() => setLoading(false));
   }, []);
@@ -108,62 +108,36 @@ const Reviews = () => {
   // Güncelleme formunu gönderme (PATCH)
   const handleUpdateSubmit = async (e) => {
     e.preventDefault();
-    if (!editModalData) return;
-
+    setSubmitting(true);
     setModalError('');
     setModalSuccess('');
-    setSubmitting(true);
-
-    const csrftoken = getCookie('csrftoken');
-    if (!csrftoken) {
-      setModalError("Güvenlik token'ı alınamadı.");
-      setSubmitting(false);
-      return;
-    }
 
     const formData = new FormData();
     formData.append('sonuc', editFormData.sonuc);
     formData.append('aciklama', editFormData.aciklama);
-    // Sadece yeni bir dosya seçildiyse gönder
     if (editReportFile) {
-      formData.append('rapor', editReportFile); // Backend field adı 'rapor' varsayıldı
+      formData.append('rapor', editReportFile);
     }
-    // juri_atama ve basvuru ID'lerini göndermeye gerek olmayabilir,
-    // çünkü genellikle /api/juri-degerlendirmeler/{id}/ endpoint'i kullanılır.
-
-    console.log("Gönderilen Güncelleme FormData:");
-    for (let [key, value] of formData.entries()) { console.log(key, value); }
 
     try {
-      const response = await fetch(`http://localhost:8000/api/juri-degerlendirmeler/${editModalData.id}/`, {
-        method: 'PATCH', // Güncelleme için PATCH
+      const response = await api.patch(`/juri-degerlendirmeler/${editModalData.id}/`, formData, {
         headers: {
-          // Content-Type AYARLANMAZ (FormData için)
-          'X-CSRFToken': csrftoken
-        },
-        credentials: 'include',
-        body: formData
+          'Content-Type': 'multipart/form-data'
+        }
       });
 
-      const responseData = await response.json();
-
-      if (response.ok) {
+      if (response.data) {
         setModalSuccess("Değerlendirme başarıyla güncellendi!");
         // State'teki ilgili değerlendirmeyi güncelle
         setEvaluationsData(prev => prev.map(ev =>
-          ev.id === editModalData.id ? responseData : ev
+          ev.id === editModalData.id ? response.data : ev
         ));
         // Modalı kapat
         setTimeout(() => closeEditModal(), 1500);
-      } else {
-        console.error("Değerlendirme güncelleme hatası:", responseData);
-        let errorMsg = `Hata (${response.status}): Güncelleme yapılamadı. `;
-         for (const key in responseData) { errorMsg += `${key}: ${Array.isArray(responseData[key]) ? responseData[key].join(', ') : responseData[key]} `; }
-        setModalError(errorMsg.trim());
       }
     } catch (err) {
       console.error("Güncelleme isteği sırasında hata:", err);
-      setModalError("Güncelleme yapılırken bir ağ hatası oluştu.");
+      setModalError(err.response?.data?.detail || "Güncelleme yapılırken bir hata oluştu.");
     } finally {
       setSubmitting(false);
     }

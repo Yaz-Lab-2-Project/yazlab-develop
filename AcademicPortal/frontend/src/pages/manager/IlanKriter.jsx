@@ -18,6 +18,7 @@ const IlanKriter = () => {
   const [errorIlan, setErrorIlan] = useState(null);
   const [kadroTipiOptions, setKadroTipiOptions] = useState([]);
   const [temelAlanOptions, setTemelAlanOptions] = useState([]);
+  const [departmanOptions, setDepartmanOptions] = useState([]);
   const [selectedKadroTipiId, setSelectedKadroTipiId] = useState('');
   const [selectedTemelAlanId, setSelectedTemelAlanId] = useState('');
   const [criteriaId, setCriteriaId] = useState(null);
@@ -32,9 +33,6 @@ const IlanKriter = () => {
   const [minKisiselEtkinlik, setMinKisiselEtkinlik] = useState(0);
   const [minKarmaEtkinlik, setMinKarmaEtkinlik] = useState(0);
   const [minTezDanismanligi, setMinTezDanismanligi] = useState(0);
-  const [customCriteria, setCustomCriteria] = useState([]);
-  const [newCriterionName, setNewCriterionName] = useState("");
-  const [newCriterionValue, setNewCriterionValue] = useState(0);
   const [loadingOptions, setLoadingOptions] = useState(true);
   const [loadingCriteria, setLoadingCriteria] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -58,20 +56,38 @@ const IlanKriter = () => {
     setLoadingOptions(true);
     Promise.all([
       api.get('/kadro-tipi/'),
-      api.get('/temel-alan/')
+      api.get('/temel-alan/'),
+      api.get('/departmanlar/')
     ])
-      .then(([kadroTipiRes, temelAlanRes]) => {
-        setKadroTipiOptions(kadroTipiRes.data.results || kadroTipiRes.data);
-        setTemelAlanOptions(temelAlanRes.data.results || temelAlanRes.data);
+      .then(([kadroTipiRes, temelAlanRes, departmanRes]) => {
+        setKadroTipiOptions(Array.isArray(kadroTipiRes.data.results) ? kadroTipiRes.data.results : 
+                           Array.isArray(kadroTipiRes.data) ? kadroTipiRes.data : []);
+        setTemelAlanOptions(Array.isArray(temelAlanRes.data.results) ? temelAlanRes.data.results : 
+                           Array.isArray(temelAlanRes.data) ? temelAlanRes.data : []);
+        setDepartmanOptions(Array.isArray(departmanRes.data.results) ? departmanRes.data.results : 
+                           Array.isArray(departmanRes.data) ? departmanRes.data : []);
       })
       .catch(err => setErrorCriteria(err.message))
       .finally(() => setLoadingOptions(false));
   }, []);
 
   useEffect(() => {
-    api.get(`/juri-atamalar/?ilan=${ilanId}`)
-      .then(res => setAssignedJuries(res.data))
-      .catch(e => setErrorJuri(e.message));
+    if (ilanId) {
+      api.get(`/juri-atamalar/?ilan=${ilanId}`)
+        .then(async (res) => {
+          const ilanJurileri = res.data.filter(juri => juri.ilan === parseInt(ilanId));
+          // Her bir jüri için detaylı bilgileri al
+          const juriPromises = ilanJurileri.map(juri => 
+            api.get(`/users/${juri.juri_uyesi}/`).then(userRes => ({
+              ...juri,
+              juri_uyesi: userRes.data
+            }))
+          );
+          const detayliJuriler = await Promise.all(juriPromises);
+          setAssignedJuries(detayliJuriler);
+        })
+        .catch(e => setErrorJuri(e.message));
+    }
   }, [ilanId]);
 
   useEffect(() => {
@@ -91,7 +107,6 @@ const IlanKriter = () => {
       setMinKisiselEtkinlik(0);
       setMinKarmaEtkinlik(0);
       setMinTezDanismanligi(0);
-      setCustomCriteria([]);
       api.get(`/atama-kriterleri/?kadro_tipi=${selectedKadroTipiId}&temel_alan=${selectedTemelAlanId}`)
         .then(res => {
           const data = res.data;
@@ -109,11 +124,6 @@ const IlanKriter = () => {
             setMinKisiselEtkinlik(kriter.min_kisisel_etkinlik || 0);
             setMinKarmaEtkinlik(kriter.min_karma_etkinlik || 0);
             setMinTezDanismanligi(kriter.min_tez_danismanligi || 0);
-            try {
-              setCustomCriteria(kriter.ozel_kriterler || []);
-            } catch {
-              setCustomCriteria([]);
-            }
           } else {
             setCriteriaId(null);
           }
@@ -143,7 +153,6 @@ const IlanKriter = () => {
       min_kisisel_etkinlik: minKisiselEtkinlik,
       min_karma_etkinlik: minKarmaEtkinlik,
       min_tez_danismanligi: minTezDanismanligi,
-      ozel_kriterler: customCriteria
     };
     try {
       const resCheck = await api.get(`/atama-kriterleri/?kadro_tipi=${selectedKadroTipiId}&temel_alan=${selectedTemelAlanId}`);
@@ -187,7 +196,16 @@ const IlanKriter = () => {
     try {
       await api.post('/juri-atamalar/', { ilan: Number(ilanId), juri_uyesi: userId });
       const updated = await api.get(`/juri-atamalar/?ilan=${ilanId}`);
-      setAssignedJuries(updated.data);
+      const ilanJurileri = updated.data.filter(juri => juri.ilan === parseInt(ilanId));
+      // Her bir jüri için detaylı bilgileri al
+      const juriPromises = ilanJurileri.map(juri => 
+        api.get(`/users/${juri.juri_uyesi}/`).then(userRes => ({
+          ...juri,
+          juri_uyesi: userRes.data
+        }))
+      );
+      const detayliJuriler = await Promise.all(juriPromises);
+      setAssignedJuries(detayliJuriler);
     } catch (e) {
       setErrorJuri(e.message);
     } finally {
@@ -201,34 +219,21 @@ const IlanKriter = () => {
     try {
       await api.delete(`/juri-atamalar/${atamaId}/`);
       const updated = await api.get(`/juri-atamalar/?ilan=${ilanId}`);
-      setAssignedJuries(updated.data);
+      const ilanJurileri = updated.data.filter(juri => juri.ilan === parseInt(ilanId));
+      // Her bir jüri için detaylı bilgileri al
+      const juriPromises = ilanJurileri.map(juri => 
+        api.get(`/users/${juri.juri_uyesi}/`).then(userRes => ({
+          ...juri,
+          juri_uyesi: userRes.data
+        }))
+      );
+      const detayliJuriler = await Promise.all(juriPromises);
+      setAssignedJuries(detayliJuriler);
     } catch (e) {
       setErrorJuri(e.message);
     } finally {
       setLoadingAssign(false);
     }
-  };
-
-  const handleAddCustomCriterion = () => {
-    if (!newCriterionName.trim()) {
-      setErrorCriteria("Özel kriter adı boş olamaz.");
-      return;
-    }
-    if (newCriterionValue === null || isNaN(newCriterionValue)) {
-      setErrorCriteria("Özel kriter değeri geçerli bir sayı olmalıdır.");
-      return;
-    }
-    setErrorCriteria(null);
-    setCustomCriteria([
-      ...customCriteria,
-      { id: `temp-${Date.now()}`, name: newCriterionName, value: newCriterionValue }
-    ]);
-    setNewCriterionName("");
-    setNewCriterionValue(0);
-  };
-
-  const handleRemoveCustomCriterion = (idToRemove) => {
-    setCustomCriteria(customCriteria.filter(criterion => criterion.id !== idToRemove));
   };
 
   const handleGoBack = () => {
@@ -239,7 +244,12 @@ const IlanKriter = () => {
     return (
       <>
         <ManagerNavbar />
-        <div className="container loading">Yükleniyor...</div>
+        <div className="container">
+          <div className="loading-container">
+            <div className="loading-spinner"></div>
+            <p>Yükleniyor...</p>
+          </div>
+        </div>
         <style>{componentStyles}</style>
       </>
     );
@@ -249,22 +259,30 @@ const IlanKriter = () => {
     return (
       <>
         <ManagerNavbar />
-        <div className="container error-message">Hata: {errorIlan}</div>
-        <button className="back-button" onClick={handleGoBack}>İlan Listesine Dön</button>
+        <div className="container">
+          <div className="error-container">
+            <p className="error-message">Hata: {errorIlan}</p>
+            <button className="back-button" onClick={handleGoBack}>İlan Listesine Dön</button>
+          </div>
+        </div>
         <style>{componentStyles}</style>
       </>
     );
   }
 
   if (!IlanKriter) {
-      return (
-          <>
-              <ManagerNavbar />
-              <div className="container error-message">İlan bulunamadı.</div>
-              <button className="back-button" onClick={handleGoBack}>İlan Listesine Dön</button>
-              <style>{componentStyles}</style>
-          </>
-      );
+    return (
+      <>
+        <ManagerNavbar />
+        <div className="container">
+          <div className="error-container">
+            <p className="error-message">İlan bulunamadı.</p>
+            <button className="back-button" onClick={handleGoBack}>İlan Listesine Dön</button>
+          </div>
+        </div>
+        <style>{componentStyles}</style>
+      </>
+    );
   }
 
   return (
@@ -274,14 +292,14 @@ const IlanKriter = () => {
         <h1 className="page-title">İlan Detayları ve Kriter Yönetimi</h1>
 
         <div className="selected-announcement-panel">
-          <h2>{IlanKriter.baslik}</h2>
+          <h2>{IlanKriter?.baslik}</h2>
           <div className="announcement-details">
-            <p><strong>Departman:</strong> {IlanKriter.departman?.ad || 'Belirtilmemiş'}</p>
-            <p><strong>Kadro Tipi:</strong> {kadroTipiOptions.find(k => k.id === parseInt(IlanKriter.kadro_tipi))?.tip || 'Belirtilmemiş'}</p>
-            <p><strong>Temel Alan:</strong> {temelAlanOptions.find(t => t.id === parseInt(IlanKriter.temel_alan))?.ad || 'Belirtilmemiş'}</p>
-            <p><strong>Başlangıç:</strong> {IlanKriter.baslangic_tarihi || 'Belirtilmemiş'}</p>
-            <p><strong>Bitiş:</strong> {IlanKriter.bitis_tarihi || 'Belirtilmemiş'}</p>
-            <p><strong>Açıklama:</strong> {IlanKriter.aciklama || 'Yok'}</p>
+            <p><strong>Departman:</strong> {Array.isArray(departmanOptions) && departmanOptions.find(d => d.id === parseInt(IlanKriter?.departman))?.ad || 'Belirtilmemiş'}</p>
+            <p><strong>Kadro Tipi:</strong> {Array.isArray(kadroTipiOptions) && kadroTipiOptions.find(k => k.id === parseInt(IlanKriter?.kadro_tipi))?.tip || 'Belirtilmemiş'}</p>
+            <p><strong>Temel Alan:</strong> {Array.isArray(temelAlanOptions) && temelAlanOptions.find(t => t.id === parseInt(IlanKriter?.temel_alan))?.ad || 'Belirtilmemiş'}</p>
+            <p><strong>Başlangıç:</strong> {IlanKriter?.baslangic_tarihi || 'Belirtilmemiş'}</p>
+            <p><strong>Bitiş:</strong> {IlanKriter?.bitis_tarihi || 'Belirtilmemiş'}</p>
+            <p><strong>Açıklama:</strong> {IlanKriter?.aciklama || 'Yok'}</p>
           </div>
           <button className="back-button top-back-button" onClick={handleGoBack}>
             İlan Listesine Dön
@@ -405,55 +423,6 @@ const IlanKriter = () => {
                   </div>
                 </div>
 
-                <h3 className="subsection-title">Özel Kriterler</h3>
-                <div className="custom-criteria-section">
-                  {customCriteria.length > 0 ? (
-                    <div className="custom-criteria-list">
-                      {customCriteria.map((criterion) => (
-                        <div key={criterion.id || `criterion-${criterion.name}`} className="custom-criterion-item">
-                          <span className="criterion-name">{criterion.name || criterion.ad}</span>
-                          <span className="criterion-value">{criterion.value ?? criterion.deger}</span>
-                          <button
-                            className="remove-button"
-                            onClick={() => handleRemoveCustomCriterion(criterion.id)}
-                            disabled={saving}
-                          >
-                            Sil
-                          </button>
-                        </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <p className="no-criteria-message">Henüz özel kriter eklenmemiş.</p>
-                  )}
-
-                  <div className="add-criterion-form">
-                    <input
-                      type="text"
-                      placeholder="Özel Kriter Adı"
-                      className="text-input"
-                      value={newCriterionName}
-                      onChange={(e) => setNewCriterionName(e.target.value)}
-                       disabled={saving}
-                    />
-                    <input
-                      type="number"
-                      placeholder="Minimum Değer"
-                      className="number-input"
-                      value={newCriterionValue}
-                      onChange={(e) => setNewCriterionValue(Number(e.target.value) || 0)}
-                       disabled={saving}
-                    />
-                    <button
-                      className="add-button"
-                      onClick={handleAddCustomCriterion}
-                       disabled={saving}
-                    >
-                      Ekle
-                    </button>
-                  </div>
-                </div>
-
                 <div className="form-actions">
                   <button
                     className="primary-button"
@@ -493,33 +462,45 @@ const IlanKriter = () => {
                   {loadingSearch ? <span className="spinner"></span> : "Ara"}
                 </button>
               </div>
+
               {errorJuri && <div className="jury-error">{errorJuri}</div>}
+              
               {juriResults.length > 0 && (
                 <div className="jury-results">
                   {juriResults.map(user => (
                     <div key={user.id} className="jury-card-result">
-                      <div>
-                        <strong>{user.first_name} {user.last_name}</strong>
-                        <div>TC: {user.TC_KIMLIK}</div>
+                      <div className="jury-info">
+                        <div className="jury-name">{user.first_name} {user.last_name}</div>
+                        <div className="jury-tc">TC: {user.TC_KIMLIK}</div>
                       </div>
                       <button
                         onClick={() => handleAssignJuri(user.id)}
-                        disabled={loadingAssign}
+                        disabled={loadingAssign || assignedJuries.some(j => j.juri_uyesi?.id === user.id)}
                         className="jury-assign-btn"
                       >
-                        Ata
+                        {assignedJuries.some(j => j.juri_uyesi?.id === user.id) ? 'Atanmış' : 'Ata'}
                       </button>
                     </div>
                   ))}
                 </div>
               )}
-              <h3>Atanan Jüri Üyeleri</h3>
+
+              <h3 className="assigned-title">Atanan Jüri Üyeleri</h3>
               <div className="jury-assigned-list">
                 {assignedJuries.length > 0 ? assignedJuries.map(a => (
                   <div key={a.id} className="jury-card assigned">
-                    <div>
-                      <strong>ID: {a.juri_uyesi}</strong>
-                      <div>Atama: {new Date(a.atama_tarihi).toLocaleString("tr-TR")}</div>
+                    <div className="assigned-info">
+                      <div className="jury-name">{a.juri_uyesi?.first_name} {a.juri_uyesi?.last_name}</div>
+                      <div className="jury-tc">TC: {a.juri_uyesi?.TC_KIMLIK}</div>
+                      <div className="assignment-date">
+                        Atama Tarihi: {new Date(a.atama_tarihi).toLocaleDateString('tr-TR', {
+                          year: 'numeric',
+                          month: 'long',
+                          day: 'numeric',
+                          hour: '2-digit',
+                          minute: '2-digit'
+                        })}
+                      </div>
                     </div>
                     <button
                       className="jury-remove-btn"
@@ -529,25 +510,200 @@ const IlanKriter = () => {
                       Kaldır
                     </button>
                   </div>
-                )) : <div>Henüz jüri ataması yapılmamış.</div>}
+                )) : <div className="no-assignments">Henüz jüri ataması yapılmamış.</div>}
               </div>
             </div>
             <style>{`
-              .jury-section { margin-bottom: 2rem; }
-              .jury-search-bar { display: flex; gap: 1rem; margin-bottom: 1rem; }
-              .jury-search-input { flex: 1; padding: 0.75rem; border-radius: 8px; border: 1px solid #ccc; font-size: 1rem; }
-              .jury-search-btn { background: #3498db; color: #fff; border: none; border-radius: 8px; padding: 0.75rem 1.5rem; font-weight: 500; cursor: pointer; transition: background 0.2s; }
-              .jury-search-btn:disabled { background: #bdc3c7; cursor: not-allowed; }
-              .jury-error { color: #dc3545; margin-bottom: 1rem; }
-              .jury-results { display: flex; flex-wrap: wrap; gap: 1rem; margin-bottom: 1.5rem; }
-              .jury-card-result { background: #f8f9fa; border-radius: 8px; padding: 1rem 1.5rem; box-shadow: 0 2px 8px rgba(0,0,0,0.07); display: flex; align-items: center; justify-content: space-between; min-width: 250px; }
-              .jury-assign-btn { background: #2ecc71; color: #fff; border: none; border-radius: 6px; padding: 0.6rem 1.25rem; font-weight: 500; cursor: pointer; transition: background 0.2s; }
-              .jury-assign-btn:disabled { background: #bdc3c7; cursor: not-allowed; }
-              .jury-assigned-list { display: flex; flex-wrap: wrap; gap: 1rem; margin-top: 1rem; }
-              .jury-card.assigned { background: #eafaf1; border: 1px solid #b2f0c0; border-radius: 8px; padding: 1rem 1.5rem; box-shadow: 0 2px 8px rgba(0,0,0,0.05); display: flex; align-items: center; justify-content: space-between; min-width: 250px; }
-              .jury-remove-btn { background: #e74c3c; color: #fff; border: none; border-radius: 6px; padding: 0.6rem 1.25rem; font-weight: 500; cursor: pointer; transition: background 0.2s; }
-              .jury-remove-btn:disabled { background: #bdc3c7; cursor: not-allowed; }
-              @media (max-width: 768px) { .jury-results, .jury-assigned-list { flex-direction: column; gap: 0.75rem; } .jury-card-result, .jury-card.assigned { min-width: 0; width: 100%; } }
+              .jury-section { 
+                margin-bottom: 2rem; 
+              }
+              .jury-search-bar { 
+                display: flex; 
+                gap: 0.5rem; 
+                margin-bottom: 1.5rem;
+                max-width: 600px;
+                margin: 0 auto 2rem auto;
+              }
+              .jury-search-input { 
+                flex: 1; 
+                padding: 0.75rem 1rem; 
+                border-radius: 8px; 
+                border: 1px solid #e0e0e0; 
+                font-size: 1rem;
+                transition: all 0.2s;
+              }
+              .jury-search-input:focus {
+                border-color: #3498db;
+                box-shadow: 0 0 0 2px rgba(52, 152, 219, 0.1);
+                outline: none;
+              }
+              .jury-search-btn { 
+                background: #3498db; 
+                color: #fff; 
+                border: none; 
+                border-radius: 8px; 
+                padding: 0.75rem 1.25rem; 
+                font-weight: 500; 
+                cursor: pointer; 
+                transition: all 0.2s;
+                font-size: 0.9rem;
+                white-space: nowrap;
+              }
+              .jury-search-btn:hover:not(:disabled) { 
+                background: #2980b9; 
+                transform: translateY(-1px);
+              }
+              .jury-search-btn:disabled { 
+                background: #bdc3c7; 
+                cursor: not-allowed; 
+              }
+              .jury-error { 
+                color: #dc3545; 
+                background: #f8d7da; 
+                padding: 0.75rem; 
+                border-radius: 8px; 
+                margin-bottom: 1rem;
+                border: 1px solid #f5c6cb;
+                text-align: center;
+                max-width: 600px;
+                margin: 0 auto 1rem auto;
+              }
+              .jury-results { 
+                display: grid; 
+                grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); 
+                gap: 1rem; 
+                margin-bottom: 2rem;
+                max-width: 1000px;
+                margin: 0 auto 2rem auto;
+              }
+              .jury-card-result { 
+                background: #fff; 
+                border-radius: 12px; 
+                padding: 1.25rem; 
+                box-shadow: 0 2px 8px rgba(0,0,0,0.08); 
+                display: flex; 
+                align-items: center; 
+                justify-content: space-between;
+                border: 1px solid #e9ecef;
+                transition: all 0.2s;
+              }
+              .jury-card-result:hover {
+                transform: translateY(-2px);
+                box-shadow: 0 4px 12px rgba(0,0,0,0.12);
+              }
+              .jury-info {
+                display: flex;
+                flex-direction: column;
+                gap: 0.25rem;
+              }
+              .jury-name {
+                font-weight: 600;
+                color: #2c3e50;
+                font-size: 1.1rem;
+              }
+              .jury-tc {
+                color: #7f8c8d;
+                font-size: 0.9rem;
+              }
+              .jury-assign-btn { 
+                background: #2ecc71; 
+                color: #fff; 
+                border: none; 
+                border-radius: 6px; 
+                padding: 0.5rem 1rem; 
+                font-weight: 500; 
+                cursor: pointer; 
+                transition: all 0.2s;
+                font-size: 0.9rem;
+              }
+              .jury-assign-btn:hover:not(:disabled) { 
+                background: #27ae60; 
+                transform: translateY(-1px);
+              }
+              .jury-assign-btn:disabled { 
+                background: #bdc3c7; 
+                cursor: not-allowed; 
+              }
+              .assigned-title {
+                color: #2c3e50;
+                margin: 2rem 0 1rem;
+                font-size: 1.3rem;
+                font-weight: 600;
+                text-align: center;
+              }
+              .jury-assigned-list { 
+                display: grid; 
+                grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); 
+                gap: 1rem;
+                max-width: 1000px;
+                margin: 0 auto;
+              }
+              .jury-card.assigned { 
+                background: #fff; 
+                border-radius: 12px; 
+                padding: 1.25rem; 
+                box-shadow: 0 2px 8px rgba(0,0,0,0.08); 
+                display: flex; 
+                align-items: center; 
+                justify-content: space-between;
+                border: 1px solid #e9ecef;
+                transition: all 0.2s;
+              }
+              .jury-card.assigned:hover {
+                transform: translateY(-2px);
+                box-shadow: 0 4px 12px rgba(0,0,0,0.12);
+              }
+              .assigned-info {
+                display: flex;
+                flex-direction: column;
+                gap: 0.5rem;
+              }
+              .assignment-date {
+                color: #7f8c8d;
+                font-size: 0.85rem;
+                font-style: italic;
+              }
+              .jury-remove-btn { 
+                background: #e74c3c; 
+                color: #fff; 
+                border: none; 
+                border-radius: 6px; 
+                padding: 0.5rem 1rem; 
+                font-weight: 500; 
+                cursor: pointer; 
+                transition: all 0.2s;
+                font-size: 0.9rem;
+              }
+              .jury-remove-btn:hover:not(:disabled) { 
+                background: #c0392b; 
+                transform: translateY(-1px);
+              }
+              .jury-remove-btn:disabled { 
+                background: #bdc3c7; 
+                cursor: not-allowed; 
+              }
+              .no-assignments {
+                grid-column: 1 / -1;
+                text-align: center;
+                padding: 2rem;
+                background: #f8f9fa;
+                border-radius: 8px;
+                color: #6c757d;
+                font-style: italic;
+                border: 1px dashed #dee2e6;
+              }
+              @media (max-width: 768px) {
+                .jury-results, .jury-assigned-list {
+                  grid-template-columns: 1fr;
+                }
+                .jury-search-bar {
+                  flex-direction: column;
+                  padding: 0 1rem;
+                }
+                .jury-search-btn {
+                  width: 100%;
+                }
+              }
             `}</style>
           </div>
         )}
@@ -828,6 +984,44 @@ const IlanKriter = () => {
             width: 100%;
           }
         }
+
+        .loading-container {
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          justify-content: center;
+          min-height: 400px;
+          gap: 1rem;
+        }
+
+        .loading-spinner {
+          width: 50px;
+          height: 50px;
+          border: 4px solid #f3f3f3;
+          border-top: 4px solid #3498db;
+          border-radius: 50%;
+          animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+          0% { transform: rotate(0deg); }
+          100% { transform: rotate(360deg); }
+        }
+
+        .error-container {
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          justify-content: center;
+          min-height: 400px;
+          gap: 1.5rem;
+        }
+
+        .error-message {
+          font-size: 1.2rem;
+          color: #721c24;
+          text-align: center;
+        }
       `}</style>
     </>
   );
@@ -835,45 +1029,45 @@ const IlanKriter = () => {
 
 const componentStyles = `
   .container {
-    max-width: 900px;
+    max-width: 1200px;
     margin: 2rem auto;
     padding: 0 1rem;
     font-family: 'Roboto', sans-serif;
   }
 
   .page-title {
-    font-size: 1.8rem;
-    margin-bottom: 1.5rem;
-    color: #333;
+    font-size: 2rem;
+    margin-bottom: 2rem;
+    color: #2c3e50;
     border-bottom: 2px solid #f0f0f0;
-    padding-bottom: 0.75rem;
+    padding-bottom: 1rem;
   }
 
   .card {
     background: white;
-    border-radius: 8px;
-    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
-    padding: 1.5rem;
-    margin-bottom: 1.5rem;
+    border-radius: 12px;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+    padding: 2rem;
+    margin-bottom: 2rem;
   }
 
   .section-title {
     font-size: 1.5rem;
-    margin-bottom: 1.25rem;
-    color: #333;
+    margin-bottom: 1.5rem;
+    color: #2c3e50;
   }
 
   .subsection-title {
     font-size: 1.2rem;
     margin: 1.5rem 0 1rem;
-    color: #444;
+    color: #34495e;
   }
 
   .selected-announcement-panel {
-    background: #f9f9f9;
-    border-radius: 8px;
-    padding: 1.25rem;
-    margin-bottom: 1.5rem;
+    background: #f8f9fa;
+    border-radius: 12px;
+    padding: 1.5rem;
+    margin-bottom: 2rem;
     border-left: 4px solid #3498db;
     position: relative;
   }
@@ -885,72 +1079,76 @@ const componentStyles = `
 
   .announcement-details {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
-    gap: 0.75rem 1.5rem;
-    margin-bottom: 1rem;
+    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+    gap: 1rem 2rem;
+    margin-bottom: 1.5rem;
   }
 
   .announcement-details p {
     margin: 0;
-    font-size: 0.95rem;
-    line-height: 1.5;
+    font-size: 1rem;
+    line-height: 1.6;
   }
+
   .announcement-details p strong {
-      margin-right: 5px;
-      color: #555;
+    margin-right: 8px;
+    color: #2c3e50;
   }
 
   .back-button {
-      padding: 0.6rem 1.25rem;
-      background: transparent;
-      color: #666;
-      border: 1px solid #ddd;
-      border-radius: 4px;
-      cursor: pointer;
-      font-weight: 500;
-      transition: all 0.2s;
-      text-decoration: none;
-      display: inline-block;
-    }
- .top-back-button {
-     position: absolute;
-     top: 1.25rem;
-     right: 1.25rem;
- }
+    padding: 0.75rem 1.5rem;
+    background: transparent;
+    color: #666;
+    border: 1px solid #ddd;
+    border-radius: 6px;
+    cursor: pointer;
+    font-weight: 500;
+    transition: all 0.2s;
+    text-decoration: none;
+    display: inline-block;
+  }
+
+  .top-back-button {
+    position: absolute;
+    top: 1.5rem;
+    right: 1.5rem;
+  }
 
   .back-button:hover {
     background: #f0f0f0;
+    transform: translateY(-1px);
   }
 
   .success-message {
     background: #d4edda;
     color: #155724;
-    padding: 0.75rem 1rem;
-    border-radius: 4px;
-    margin-bottom: 1rem;
+    padding: 1rem;
+    border-radius: 8px;
+    margin-bottom: 1.5rem;
     border: 1px solid #c3e6cb;
   }
 
   .error-message {
     background: #f8d7da;
     color: #721c24;
-    padding: 0.75rem 1rem;
-    border-radius: 4px;
-    margin-bottom: 1rem;
-     border: 1px solid #f5c6cb;
+    padding: 1rem;
+    border-radius: 8px;
+    margin-bottom: 1.5rem;
+    border: 1px solid #f5c6cb;
   }
+
   .info-message {
-      background: #e2e3e5;
-      color: #383d41;
-      padding: 0.75rem 1rem;
-      border-radius: 4px;
-      margin-top: 1rem;
-      border: 1px solid #d6d8db;
-      text-align: center;
+    background: #e2e3e5;
+    color: #383d41;
+    padding: 1rem;
+    border-radius: 8px;
+    margin-top: 1.5rem;
+    border: 1px solid #d6d8db;
+    text-align: center;
   }
 
   .loading-message {
-    padding: 1rem;
+    padding: 1.5rem;
     text-align: center;
     color: #666;
     font-style: italic;
@@ -958,164 +1156,72 @@ const componentStyles = `
 
   .criteria-selection {
     display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 1.5rem;
-    margin-bottom: 1.5rem;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: 2rem;
+    margin-bottom: 2rem;
   }
 
   .form-group {
-    margin-bottom: 1rem;
+    margin-bottom: 1.5rem;
   }
 
   .form-group label {
     display: block;
-    margin-bottom: 0.5rem;
+    margin-bottom: 0.75rem;
     font-weight: 500;
-    color: #555;
-    font-size: 0.9rem;
+    color: #2c3e50;
+    font-size: 1rem;
   }
 
   .select-input, .text-input, .number-input {
     width: 100%;
-    padding: 0.75rem;
-    border: 1px solid #ccc;
-    border-radius: 4px;
+    padding: 0.875rem 1rem;
+    border: 1px solid #ddd;
+    border-radius: 8px;
     font-size: 1rem;
     box-sizing: border-box;
-    transition: border-color 0.2s;
+    transition: all 0.2s;
   }
-   .select-input:focus, .text-input:focus, .number-input:focus {
-       border-color: #3498db;
-       outline: none;
-   }
-    .select-input:disabled, .text-input:disabled, .number-input:disabled {
-        background-color: #f8f9fa;
-        cursor: not-allowed;
-    }
 
+  .select-input:focus, .text-input:focus, .number-input:focus {
+    border-color: #3498db;
+    box-shadow: 0 0 0 3px rgba(52, 152, 219, 0.1);
+    outline: none;
+  }
+
+  .select-input:disabled, .text-input:disabled, .number-input:disabled {
+    background-color: #f8f9fa;
+    cursor: not-allowed;
+  }
 
   .criteria-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
-    gap: 1rem 1.5rem;
-  }
-
-  .custom-criteria-section {
-    margin: 1.5rem 0;
-    border-top: 1px solid #eee;
-    padding-top: 1.5rem;
-  }
-
-  .custom-criteria-list {
-    margin-bottom: 1.5rem;
-    display: flex;
-    flex-direction: column;
-    gap: 0.75rem;
-  }
-
-  .custom-criterion-item {
-    display: flex;
-    align-items: center;
-    padding: 0.75rem 1rem;
-    background: #f9f9f9;
-    border-radius: 4px;
-    border: 1px solid #eee;
-  }
-
-  .criterion-name {
-    flex: 1;
-    font-weight: 500;
-    margin-right: 1rem;
-  }
-
-  .criterion-value {
-    margin: 0 1rem;
-    font-weight: bold;
-    color: #333;
-     min-width: 40px;
-     text-align: right;
-  }
-
-  .add-criterion-form {
-    display: flex;
-    gap: 0.75rem;
-    margin-top: 1rem;
-    align-items: flex-end;
-  }
-
-  .add-criterion-form .text-input {
-    flex: 3;
-  }
-
-  .add-criterion-form .number-input {
-    flex: 1;
-  }
- .add-button, .remove-button {
-     padding: 0.75rem 1rem;
-     border: none;
-     border-radius: 4px;
-     font-size: 0.9rem;
-     font-weight: 500;
-     cursor: pointer;
-     white-space: nowrap;
-     transition: background-color 0.2s;
-     height: fit-content;
- }
-  .add-button {
-    background: #2ecc71;
-    color: white;
-  }
-
-  .remove-button {
-    background: #e74c3c;
-    color: white;
-    margin-left: 0.5rem;
-     padding: 0.4rem 0.8rem;
-  }
-
-  .add-button:hover {
-    background: #27ae60;
-  }
-
-  .remove-button:hover {
-    background: #c0392b;
-  }
-   .add-button:disabled, .remove-button:disabled {
-       background-color: #bdc3c7;
-       cursor: not-allowed;
-   }
-
-  .no-criteria-message {
-    color: #666;
-    padding: 1rem;
-    text-align: center;
-    background: #f9f9f9;
-    border-radius: 4px;
-    font-style: italic;
-    margin-top: 1rem;
+    grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+    gap: 1.5rem 2rem;
   }
 
   .form-actions {
-    margin-top: 2rem;
+    margin-top: 2.5rem;
     text-align: right;
     border-top: 1px solid #eee;
-    padding-top: 1.5rem;
+    padding-top: 2rem;
   }
 
   .primary-button {
-    padding: 0.8rem 2rem;
+    padding: 1rem 2.5rem;
     background: #3498db;
     color: white;
     border: none;
-    border-radius: 4px;
+    border-radius: 8px;
     font-weight: 500;
-    font-size: 1rem;
+    font-size: 1.1rem;
     cursor: pointer;
     transition: all 0.2s;
   }
 
   .primary-button:hover {
     background: #2980b9;
+    transform: translateY(-1px);
   }
 
   .primary-button:disabled {
@@ -1125,50 +1231,53 @@ const componentStyles = `
 
   @media (max-width: 768px) {
     .container {
-        margin: 1rem auto;
-        padding: 0 0.5rem;
+      margin: 1rem auto;
+      padding: 0 1rem;
     }
+
     .page-title {
-        font-size: 1.5rem;
+      font-size: 1.5rem;
+      margin-bottom: 1.5rem;
     }
+
+    .card {
+      padding: 1.5rem;
+    }
+
     .selected-announcement-panel {
-        padding: 1rem;
+      padding: 1.25rem;
     }
+
     .announcement-details {
-        grid-template-columns: 1fr;
-        gap: 0.5rem;
-    }
-    .top-back-button {
-        position: static;
-        display: block;
-        width: 100%;
-        margin-top: 1rem;
-        text-align: center;
-    }
-    .criteria-selection {
       grid-template-columns: 1fr;
       gap: 1rem;
     }
+
+    .top-back-button {
+      position: static;
+      display: block;
+      width: 100%;
+      margin-top: 1rem;
+      text-align: center;
+    }
+
+    .criteria-selection {
+      grid-template-columns: 1fr;
+      gap: 1.5rem;
+    }
+
     .criteria-grid {
       grid-template-columns: 1fr;
-       gap: 1rem;
+      gap: 1.5rem;
     }
-    .add-criterion-form {
-        flex-direction: column;
-        align-items: stretch;
-    }
-     .add-criterion-form .text-input,
-     .add-criterion-form .number-input,
-     .add-criterion-form .add-button {
-         width: 100%;
-     }
-      .form-actions {
-          text-align: center;
-      }
-       .primary-button {
-           width: 100%;
-       }
 
+    .form-actions {
+      text-align: center;
+    }
+
+    .primary-button {
+      width: 100%;
+    }
   }
 `;
 

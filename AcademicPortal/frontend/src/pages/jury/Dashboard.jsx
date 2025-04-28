@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
 import JuryNavbar from "../../components/navbars/JuryNavbar.jsx";
+import api from '../../services/api';
 // import { useAuth } from "../../context/AuthContext"; // Gerekli değilse kaldırılabilir
 
 const JuryDashboard = () => {
@@ -16,37 +17,15 @@ const JuryDashboard = () => {
       setLoading(true);
       setError(null);
       try {
-        // API isteklerini aynı anda başlatalım
         const [statsRes, evaluationsRes, assignmentsRes] = await Promise.all([
-          // 1. İstatistikler (Değişiklik yok)
-          fetch('http://localhost:8000/api/jury-stats/', { credentials: 'include' }),
-          // 2. Son Değerlendirmeler (Değişiklik yok - ama serializer nested veri sağlamalı)
-          fetch('http://localhost:8000/api/juri-degerlendirmeler/?my_evaluations=true&ordering=-degerlendirme_tarihi&limit=5', { credentials: 'include' }),
-          // 3. Atanmış İlanlar (Bildirimler yerine)
-          // Backend'in juri_uyesi'ne göre filtrelediğini varsayıyoruz (?juri_uyesi_id=me veya benzeri)
-          fetch('http://localhost:8000/api/juri-atamalar/?my_assignments=true', { credentials: 'include' }) // ÖRNEK URL ve Filtre
+          api.get('/jury-stats/'),
+          api.get('/juri-degerlendirmeler/?my_evaluations=true&ordering=-degerlendirme_tarihi&limit=5'),
+          api.get('/juri-atamalar/?my_assignments=true')
         ]);
 
-        // Yanıtları kontrol et
-        if (!statsRes.ok) throw new Error(`İstatistikler alınamadı (${statsRes.status})`);
-        if (!evaluationsRes.ok) throw new Error(`Değerlendirmeler alınamadı (${evaluationsRes.status})`);
-        if (!assignmentsRes.ok) throw new Error(`Atanmış ilanlar alınamadı (${assignmentsRes.status})`);
-
-        // Verileri JSON'a çevir
-        const statsJson = await statsRes.json();
-        const evaluationsJson = await evaluationsRes.json();
-        const assignmentsJson = await assignmentsRes.json(); // Atama verisi
-
-        console.log("Stats:", statsJson);
-        console.log("Evaluations:", evaluationsJson);
-        console.log("Assignments:", assignmentsJson); // Atamaları logla
-
-        // State'leri güncelle
-        setStatsData(statsJson);
-        setRecentEvaluations(evaluationsJson.results || evaluationsJson);
-        // notificationsData yerine assignedIlanlarData'yı set et
-        setAssignedIlanlarData(assignmentsJson.results || assignmentsJson);
-
+        setStatsData(statsRes.data);
+        setRecentEvaluations(evaluationsRes.data.results || evaluationsRes.data);
+        setAssignedIlanlarData(assignmentsRes.data.results || assignmentsRes.data);
       } catch (err) {
         console.error("Jüri Dashboard verileri çekilirken hata:", err);
         setError(err.message);
@@ -62,10 +41,40 @@ const JuryDashboard = () => {
    const formatDate = (dateString) => {
      if (!dateString) return "-";
      try {
-       return new Date(dateString).toLocaleDateString("tr-TR", { day: '2-digit', month: '2-digit', year: 'numeric' });
-     } catch (e) { return dateString; }
+       return new Date(dateString).toLocaleDateString("tr-TR", {
+         day: '2-digit',
+         month: '2-digit',
+         year: 'numeric'
+       });
+     } catch  {
+       return dateString;
+     }
    };
 
+  if (loading) {
+    return (
+      <>
+        <JuryNavbar />
+        <div className="dashboard-container">
+          <p>Yükleniyor...</p>
+        </div>
+        <style>{css}</style>
+      </>
+    );
+  }
+
+  if (error) {
+    return (
+      <>
+        <JuryNavbar />
+        <div className="dashboard-container">
+          <h1 className="dashboard-title">JÜRİ DASHBOARD</h1>
+          <p style={{ color: 'red' }}>Hata: {error}</p>
+        </div>
+        <style>{css}</style>
+      </>
+    );
+  }
 
   // --- Dashboard İçeriği ---
   return (
@@ -111,8 +120,8 @@ const JuryDashboard = () => {
                     {atama.ilan ? (
                         <span>
                             <strong>{atama.ilan.baslik || 'İlan Başlığı Yok'}</strong>
-                             (Bitiş: {formatDate(atama.ilan.bitis_tarihi)})
-                             {/* Belki ilanın başvurularına bir link eklenebilir */}
+                            <br />
+                            <small>Bitiş: {formatDate(atama.ilan.bitis_tarihi)}</small>
                         </span>
                     ) : (
                         <span>İlan bilgisi eksik (Atama ID: {atama.id})</span>
@@ -130,8 +139,8 @@ const JuryDashboard = () => {
 
 const css = `
   .dashboard-container {
-    min-height: calc(100vh - 70px); /* Navbar yüksekliğini varsayarak (ayarlamanız gerekebilir) */
-    padding: 2rem; /* Padding artırıldı */
+    min-height: calc(100vh - 70px);
+    padding: 2rem;
     font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
     max-width: 1400px;
     margin-left: auto;
@@ -139,96 +148,83 @@ const css = `
   }
 
   .dashboard-title {
-    font-size: 2.2rem; /* Biraz büyütüldü */
-    font-weight: 700; /* Daha kalın */
-    margin-bottom: 2rem; /* Daha fazla boşluk */
-    color: #2c3e50; /* Koyu renk */
-    text-align: left; /* Sola yaslandı */
+    font-size: 2.2rem;
+    font-weight: 700;
+    margin-bottom: 2rem;
+    color: #2c3e50;
+    text-align: left;
     padding-bottom: 0.5rem;
-    border-bottom: 3px solid #009944; /* Yeşil alt çizgi */
-    display: inline-block; /* Çizginin sadece yazı kadar olmasını sağlar */
+    border-bottom: 3px solid #009944;
+    display: inline-block;
   }
 
-  /* İstatistik Kutuları */
   .stats-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); /* Min genişlik artırıldı */
-    gap: 1.5rem; /* Aralık artırıldı */
-    margin-bottom: 2.5rem; /* Daha fazla boşluk */
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 1.5rem;
+    margin-bottom: 2.5rem;
   }
 
   .stats-box {
-    padding: 1.5rem; /* İç boşluk artırıldı */
+    padding: 1.5rem;
     border-radius: 10px;
-    box-shadow: 0 5px 15px rgba(0, 0, 0, 0.07); /* Gölge belirginleştirildi */
+    box-shadow: 0 5px 15px rgba(0, 0, 0, 0.07);
     background-color: #fff;
-    text-align: left; /* İçerik sola yaslandı */
-    border-left: 5px solid; /* Renkli kenar eklendi */
+    text-align: left;
+    border-left: 5px solid;
     transition: transform 0.2s ease-in-out, box-shadow 0.2s ease-in-out;
   }
 
-   .stats-box:hover {
-      transform: translateY(-4px);
-      box-shadow: 0 8px 20px rgba(0, 0, 0, 0.1);
+  .stats-box:hover {
+    transform: translateY(-4px);
+    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.1);
   }
 
   .stats-label {
-    font-size: 0.95rem; /* Biraz büyütüldü */
-    color: #555; /* Renk koyulaştırıldı */
+    font-size: 0.95rem;
+    color: #555;
     margin-bottom: 0.5rem;
     font-weight: 500;
   }
 
   .stats-value {
-    font-size: 2rem; /* Daha büyük */
-    font-weight: 700; /* Daha kalın */
+    font-size: 2rem;
+    font-weight: 700;
     margin: 0;
     line-height: 1.2;
   }
 
-  /* Renkli Kenarlar */
   .stats-total-applications { border-left-color: #ffc107; }
   .stats-completed-evaluations { border-left-color: #28a745; }
   .stats-pending-reports { border-left-color: #dc3545; }
 
-  /* Değer Renkleri (opsiyonel, kenar rengi yeterli olabilir) */
-  /* .stats-total-applications .stats-value { color: #ffc107; } */
-  /* .stats-completed-evaluations .stats-value { color: #28a745; } */
-  /* .stats-pending-reports .stats-value { color: #dc3545; } */
-
-  /* Ana İçerik Alanı */
   .main-grid {
     display: grid;
     grid-template-columns: 1fr;
-    gap: 1.5rem; /* Aralık artırıldı */
+    gap: 1.5rem;
   }
 
-  /* Orta (tablet) ve büyük ekranlar için 2 sütun */
   @media (min-width: 768px) {
     .main-grid {
       grid-template-columns: 1fr 1fr;
-      gap: 2rem; /* Aralık artırıldı */
+      gap: 2rem;
     }
   }
-   /* Daha büyük ekranlar için (isteğe bağlı) */
-  /* @media (min-width: 1200px) {
-      .main-grid { grid-template-columns: 2fr 1fr; }
-  } */
 
   .recent-candidates, .notifications {
-    padding: 1.5rem; /* İç boşluk artırıldı */
+    padding: 1.5rem;
     border-radius: 10px;
     box-shadow: 0 5px 15px rgba(0, 0, 0, 0.07);
     background-color: #fff;
   }
 
   .section-title {
-    font-size: 1.3rem; /* Biraz büyütüldü */
+    font-size: 1.3rem;
     font-weight: 600;
     margin-top: 0;
-    margin-bottom: 1.5rem; /* Daha fazla boşluk */
-    color: #009944; /* Ana renk */
-    border-bottom: 2px solid #eee; /* Daha belirgin ayırıcı */
+    margin-bottom: 1.5rem;
+    color: #009944;
+    border-bottom: 2px solid #eee;
     padding-bottom: 0.75rem;
   }
 
@@ -236,7 +232,7 @@ const css = `
     list-style: none;
     padding: 0;
     margin: 0;
-    max-height: 350px; /* Yükseklik artırıldı */
+    max-height: 350px;
     overflow-y: auto;
   }
 
@@ -244,15 +240,16 @@ const css = `
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding: 1rem 0.5rem; /* Padding ayarlandı */
-    border-bottom: 1px solid #f0f0f0; /* Daha ince çizgi */
-    color: #444; /* Daha koyu yazı */
+    padding: 1rem 0.5rem;
+    border-bottom: 1px solid #f0f0f0;
+    color: #444;
     font-size: 1rem;
     transition: background-color 0.15s ease;
   }
-   .candidate-item:hover, .notification-item:hover {
-       background-color: #f8f9fa; /* Hafif hover efekti */
-   }
+
+  .candidate-item:hover, .notification-item:hover {
+    background-color: #f8f9fa;
+  }
 
   .candidate-item:last-child, .notification-item:last-child {
     border-bottom: none;
@@ -260,51 +257,20 @@ const css = `
 
   .candidate-date {
     font-size: 0.9rem;
-    color: #777; /* Renk açıldı */
+    color: #777;
     white-space: nowrap;
     margin-left: 1rem;
   }
 
   .notification-item {
-      justify-content: flex-start;
-      line-height: 1.4; /* Okunabilirlik için */
+    justify-content: flex-start;
+    line-height: 1.4;
   }
 
-  /* Scrollbar Stilleri */
   ::-webkit-scrollbar { width: 8px; }
   ::-webkit-scrollbar-thumb { background-color: #ccc; border-radius: 4px; }
   ::-webkit-scrollbar-thumb:hover { background-color: #aaa; }
   ::-webkit-scrollbar-track { background: transparent; }
-
-  /* Genel Loading/Error Container Stili */
-  .loading-error-container {
-      display: flex;
-      justify-content: center;
-      align-items: center;
-      min-height: calc(100vh - 100px); /* Navbar'ı hesaba kat */
-      font-size: 1.2rem;
-      color: #555;
-  }
 `;
-
-// Yükleme veya Hata Durumları için basit stil objesi (CSS string'i dışında)
-const styles = {
-  loadingErrorContainer: {
-      display: 'flex',
-      flexDirection: 'column', // Hata mesajını başlığın altına almak için
-      justifyContent: 'center',
-      alignItems: 'center',
-      minHeight: 'calc(100vh - 100px)',
-      padding: '2rem',
-      textAlign: 'center',
-      fontFamily: "'Segoe UI', Tahoma, Geneva, Verdana, sans-serif",
-  },
-   dashboardTitle: { // Hata durumunda da başlığı göstermek için
-     fontSize: '2rem',
-     fontWeight: 'bold',
-     marginBottom: '24px',
-     color: '#333',
-  }
-};
 
 export default JuryDashboard;

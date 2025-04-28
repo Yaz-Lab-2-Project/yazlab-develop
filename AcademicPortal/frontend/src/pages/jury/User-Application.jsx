@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react"; // useEffect ve useState imp
 import { useParams } from "react-router-dom";
 import JuryNavbar from "../../components/navbars/JuryNavbar.jsx";
 import { FaFileAlt } from "react-icons/fa"; // İkonu kullanacağız
+import api from '../../services/api';
 
 // Sabit veriyi kaldır
 // const application = { ... };
@@ -28,28 +29,25 @@ const UserApplication = () => {
        return;
     }
 
-    setLoading(true);
-    setError(null);
-    // Belirli bir başvurunun detayını çek
-    fetch(`http://localhost:8000/api/basvurular/${basvuruId}/`, { credentials: 'include' })
-      .then(res => {
-        if (!res.ok) {
-           if(res.status === 404) throw new Error(`Başvuru bulunamadı (ID: ${basvuruId})`);
-           throw new Error(`Başvuru detayı alınamadı (${res.status})`);
+    const fetchData = async () => {
+      setLoading(true);
+      setError(null);
+      try {
+        const response = await api.get(`/basvurular/${basvuruId}/`);
+        console.log("API yanıtı:", response.data);
+        if (!response.data) {
+          throw new Error('Veri bulunamadı');
         }
-        return res.json();
-      })
-      .then(data => {
-        console.log("Gelen Başvuru Detayı:", data);
-        setApplicationData(data);
-      })
-      .catch(err => {
+        setApplicationData(response.data);
+      } catch (err) {
         console.error("Başvuru detayı çekme hatası:", err);
-        setError(err.message);
-      })
-      .finally(() => {
+        setError(err.message || 'Veri çekilirken bir hata oluştu');
+      } finally {
         setLoading(false);
-      });
+      }
+    };
+
+    fetchData();
   }, [basvuruId]); // basvuruId değiştiğinde tekrar çalışır
 
   // Tarih formatlama
@@ -57,7 +55,7 @@ const UserApplication = () => {
     if (!dateString) return "-";
     try {
       return new Date(dateString).toLocaleDateString("tr-TR", { day: '2-digit', month: '2-digit', year: 'numeric' });
-    } catch (e) { return dateString; }
+    } catch { return dateString; }
   };
 
   // --- Yükleme ve Hata Durumları ---
@@ -73,9 +71,9 @@ const UserApplication = () => {
 
   // --- Başvuru Detayı ---
   // API yanıtındaki nested yapıya göre erişim yapıyoruz (?. ile güvenli erişim)
-  const aday = applicationData.aday;
-  const ilan = applicationData.ilan;
-  const kadro = ilan?.kadro_tipi; // İlanın içindeki kadro_tipi objesi varsayılıyor
+  const aday = applicationData.aday || {};
+  const ilan = applicationData.ilan || {};
+  const kadro = ilan?.kadro_tipi || {};
   const statusColor = statusColors[applicationData.durum] || statusColors.Bilinmiyor;
 
   // Dosyaları listelemek için (Backend yanıtında dosya URL'leri olmalı)

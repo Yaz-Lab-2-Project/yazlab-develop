@@ -155,7 +155,7 @@ export default function App() {
                 <Route path="/jury-rapor" element={<ProtectedRoute allowedRole="juri"><Rapor /></ProtectedRoute>} />
                 <Route path="/jury-reviews" element={<ProtectedRoute allowedRole="juri"><Reviews /></ProtectedRoute>} />
                 <Route path="/jury-applications" element={<ProtectedRoute allowedRole="juri"><Applications /></ProtectedRoute>} />
-                <Route path="/jury-userapplication" element={<ProtectedRoute allowedRole="juri"><UserApplication /></ProtectedRoute>} />
+                <Route path="/jury-userapplication/:id" element={<ProtectedRoute allowedRole="juri"><UserApplication /></ProtectedRoute>} />
 
                 {/* Catch-all */}
                 <Route path="*" element={<Navigate to="/login" replace />} />

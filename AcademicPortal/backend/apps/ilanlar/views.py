@@ -40,6 +40,10 @@ def get_manager_dashboard_data(request):
     """
     Yönetici Paneli için özet verileri hesaplar ve döndürür.
     """
+    # Kullanıcının yönetici olup olmadığını kontrol et
+    if getattr(request.user, 'user_type', None) != 'YONETICI':
+        return Response({"detail": "Bu sayfaya erişim yetkiniz yok."}, status=status.HTTP_403_FORBIDDEN)
+
     today = timezone.localdate()
     next_week = today + timedelta(days=7)
     try:

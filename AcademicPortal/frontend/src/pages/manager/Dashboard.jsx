@@ -35,21 +35,25 @@ const ManagerDashboard = () => {
         setLoading(true);
         setError(null);
 
-        // 1) CSRF cookie’sini set eden endpoint’i çağır
+        // 1) CSRF cookie'sini set eden endpoint'i çağır
         await fetch("http://localhost:8000/api/set-csrf/", {
           credentials: "include"
         });
 
-        // 2) Tarayıcıdaki cookie’den CSRF token’ı al
+        // 2) Tarayıcıdaki cookie'den CSRF token'ı al
         const csrftoken = getCookie("csrftoken");
+        
+        // 3) Auth token'ı al
+        const authToken = localStorage.getItem('authToken');
 
-        // 3) Manager-stats isteğini CSRF header’ı ile yap
+        // 4) Manager-stats isteğini CSRF ve Auth header'ları ile yap
         const res = await fetch("http://localhost:8000/api/manager-stats/", {
           method: "GET",
           credentials: "include",
           headers: {
-            "Accept":      "application/json",
-            "X-CSRFToken": csrftoken
+            "Accept": "application/json",
+            "X-CSRFToken": csrftoken,
+            "Authorization": `Token ${authToken}`
           },
         });
 

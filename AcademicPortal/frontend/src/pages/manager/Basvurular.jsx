@@ -6,13 +6,14 @@ import ManagerNavbar from "../../components/navbars/ManagerNavbar";
 // function getCookie(name) { ... }
 
 const Basvurular = () => {
-  const navigate = useNavigate(); // Kullanılmıyor ama ileride lazım olabilir
+  // Kullanılmıyor ama ileride lazım olabilir
+  const _navigate = useNavigate();
 
   // State Tanımlamaları
   const [allIlanlar, setAllIlanlar] = useState([]); // API'den gelen tüm ilanlar
   const [applicationsData, setApplicationsData] = useState([]); // Seçili ilana ait başvurular
   const [selectedAdId, setSelectedAdId] = useState(null); // Seçili ilanın ID'si
-  const [selectedAdTitle, setSelectedAdTitle] = useState(""); // Input'ta gösterilecek başlık
+  const [_selectedAdTitle, setSelectedAdTitle] = useState(""); // Input'ta gösterilecek başlık
   const [adSearch, setAdSearch] = useState(""); // Arama input değeri
   const [modalData, setModalData] = useState(null); // Modal'da gösterilecek başvuru verisi
   const [showDropdown, setShowDropdown] = useState(false);
@@ -26,7 +27,12 @@ const Basvurular = () => {
   useEffect(() => {
     setIlanLoading(true);
     setIlanError(null);
-    fetch('http://localhost:8000/api/ilanlar/', { credentials: 'include' })
+    fetch('http://localhost:8000/api/ilanlar/', { 
+      credentials: 'include',
+      headers: {
+        'Authorization': `Token ${localStorage.getItem('authToken')}`
+      }
+    })
       .then(res => {
         if (!res.ok) throw new Error(`İlanlar alınamadı (${res.status})`);
         return res.json();
@@ -52,7 +58,12 @@ const Basvurular = () => {
     setBasvuruError(null);
     setApplicationsData([]); // Yeni istek öncesi listeyi temizle
     // Seçili ilana ait başvuruları çek (?ilan_id=... backend'de tanımlı olmalı)
-    fetch(`http://localhost:8000/api/basvurular/?ilan_id=${selectedAdId}`, { credentials: 'include' })
+    fetch(`http://localhost:8000/api/basvurular/?ilan_id=${selectedAdId}`, { 
+      credentials: 'include',
+      headers: {
+        'Authorization': `Token ${localStorage.getItem('authToken')}`
+      }
+    })
       .then(res => {
         if (!res.ok) throw new Error(`Başvurular alınamadı (${res.status})`);
         return res.json();
@@ -92,7 +103,7 @@ const Basvurular = () => {
      if (!dateString) return "-";
      try {
        return new Date(dateString).toLocaleDateString("tr-TR", { day: '2-digit', month: '2-digit', year: 'numeric' });
-     } catch (e) { return dateString; }
+     } catch { return dateString; }
    };
 
   // Belge listesini oluşturma (modal için)

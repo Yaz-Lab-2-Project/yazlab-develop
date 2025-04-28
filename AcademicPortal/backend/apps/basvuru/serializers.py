@@ -1,7 +1,12 @@
 from rest_framework import serializers
 from .models import Basvuru, AdayFaaliyet, BasvuruSonuc, Tablo5
+from apps.users.serializers import UserSerializer
+from apps.ilanlar.serializers import IlanSerializer
 
 class BasvuruSerializer(serializers.ModelSerializer):
+    aday = UserSerializer(read_only=True)
+    ilan = IlanSerializer(read_only=True)
+
     class Meta:
         model = Basvuru
         fields = '__all__'

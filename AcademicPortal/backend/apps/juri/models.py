@@ -1,28 +1,42 @@
 from django.db import models
+from django.contrib.auth import get_user_model
 from apps.ilanlar.models import Ilan
-from apps.users.models import User
 from apps.basvuru.models import Basvuru
 
+User = get_user_model()
+
 class JuriAtama(models.Model):
-    ilan = models.ForeignKey(Ilan, on_delete=models.CASCADE, related_name="juri_atamalari")
-    juri_uyesi = models.ForeignKey(User, on_delete=models.CASCADE, related_name="juri_gorevleri")
+    juri_uyesi = models.ForeignKey(User, on_delete=models.CASCADE, related_name='juri_atamalari')
+    ilan = models.ForeignKey(Ilan, on_delete=models.CASCADE, related_name='juri_atamalari')
     atama_tarihi = models.DateTimeField(auto_now_add=True)
+    aktif = models.BooleanField(default=True)
 
     class Meta:
-        verbose_name = 'Jüri Atama'
+        unique_together = ('juri_uyesi', 'ilan')
+        verbose_name = 'Jüri Ataması'
         verbose_name_plural = 'Jüri Atamaları'
-        unique_together = ('ilan','juri_uyesi')
+
+    def __str__(self):
+        return f"{self.juri_uyesi.get_full_name()} - {self.ilan.baslik}"
 
 class JuriDegerlendirme(models.Model):
-    DEGERLENDIRME_SONUC_CHOICES = (('OLUMLU','Olumlu'),('OLUMSUZ','Olumsuz'))
-    juri_atama = models.ForeignKey(JuriAtama, on_delete=models.CASCADE, related_name="degerlendirmeler")
-    basvuru = models.ForeignKey(Basvuru, on_delete=models.CASCADE, related_name="juri_degerlendirmeleri")
-    sonuc = models.CharField(max_length=10, choices=DEGERLENDIRME_SONUC_CHOICES, verbose_name="Değerlendirme Sonucu")
-    rapor = models.FileField(upload_to='juri_raporlari/', verbose_name="Jüri Raporu")
+    SONUC_CHOICES = [
+        ('OLUMLU', 'Olumlu'),
+        ('OLUMSUZ', 'Olumsuz'),
+    ]
+
+    juri_atama = models.ForeignKey(JuriAtama, on_delete=models.CASCADE, related_name='degerlendirmeler')
+    basvuru = models.ForeignKey(Basvuru, on_delete=models.CASCADE, related_name='juri_degerlendirmeleri')
+    sonuc = models.CharField(max_length=20, choices=SONUC_CHOICES)
+    aciklama = models.TextField(blank=True, null=True)
+    rapor = models.FileField(upload_to='juri_raporlari/%Y/%m/%d/', null=True, blank=True)
     degerlendirme_tarihi = models.DateTimeField(auto_now_add=True)
-    aciklama = models.TextField(blank=True, null=True, verbose_name="Açıklama")
+    guncelleme_tarihi = models.DateTimeField(auto_now=True)
 
     class Meta:
-        verbose_name = 'Jüri Değerlendirme'
+        unique_together = ('juri_atama', 'basvuru')
+        verbose_name = 'Jüri Değerlendirmesi'
         verbose_name_plural = 'Jüri Değerlendirmeleri'
-        unique_together = ('juri_atama','basvuru')
+
+    def __str__(self):
+        return f"{self.juri_atama.juri_uyesi.get_full_name()} - {self.basvuru.aday.get_full_name()}"

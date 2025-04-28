@@ -1,7 +1,7 @@
 # academic_portal/urls.py
 
 from django.contrib import admin
-from django.urls import path, include
+from django.urls import path, include, re_path
 from rest_framework.routers import DefaultRouter
 
 # --- Gerekli ViewSet ve View Importları ---
@@ -76,6 +76,11 @@ urlpatterns += [
     path('', TemplateView.as_view(template_name='index.html'), name='frontend'),
     # Tüm frontend rotalarını index.html'e yönlendir (SPA için)
     path('<path:path>', TemplateView.as_view(template_name='index.html'), name='frontend-catch-all'),
+]
+
+# SPA için: Sadece assets, static, media ile BAŞLAMAYAN path'ler index.html'e yönlendirilsin
+urlpatterns += [
+    re_path(r'^(?!static/|media/|assets/).*$', TemplateView.as_view(template_name='index.html')),
 ]
 
 # --- Statik/Medya Ayarları ---

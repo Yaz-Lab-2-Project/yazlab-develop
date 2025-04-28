@@ -1,23 +1,8 @@
 import React, { useState, useEffect } from "react";
 import { FaFileAlt } from "react-icons/fa";
 import JuryNavbar from "../../components/navbars/JuryNavbar.jsx";
+import api from '../../services/api';
 // import { useAuth } from "../../context/AuthContext"; // Gerekirse import edilebilir
-
-// CSRF token'ı almak için getCookie fonksiyonu
-function getCookie(name) {
-    let cookieValue = null;
-    if (document.cookie && document.cookie !== '') {
-        const cookies = document.cookie.split(';');
-        for (let i = 0; i < cookies.length; i++) {
-            const cookie = cookies[i].trim();
-            if (cookie.substring(0, name.length + 1) === (name + '=')) {
-                cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
-                break;
-            }
-        }
-    }
-    return cookieValue;
-}
 
 const Rapor = () => {
   // State'ler
@@ -35,32 +20,25 @@ const Rapor = () => {
 
   // Atamaları ve ilişkili verileri çek
   useEffect(() => {
-    setLoading(true);
-    setError(null);
-    // Backend'in jüri üyesine göre filtrelenmiş ve nested veri içeren bir endpoint sağladığını varsayıyoruz.
-    // Örneğin: /api/my-jury-assignments/ veya /api/juri-atamalar/?juri_uyesi_id=me&include_details=true
-    fetch('http://localhost:8000/api/juri-atamalar/?my_assignments=true', { credentials: 'include' }) // ÖRNEK URL - KENDİNİZE GÖRE GÜNCELLEYİN
-      .then(res => {
-        if (!res.ok) {
-          throw new Error(`Atama verileri alınamadı (${res.status})`);
-        }
-        return res.json();
-      })
-      .then(data => {
-        console.log("Gelen Atamalar:", data);
-        // Gelen verinin yapısına göre ayarlayın (DRF pagination varsa data.results olabilir)
-        // Her atamanın içinde ilan, başvuru, aday ve mevcut değerlendirme bilgisi olmalı
-        setAssignments(data.results || data);
-      })
-      .catch(err => {
+    const fetchAssignments = async () => {
+      setLoading(true);
+      try {
+        const response = await api.get('/juri-atamalar/?my_assignments=true');
+        // Gelen yanıtı array'e dönüştür
+        const assignments = Array.isArray(response.data) ? response.data : 
+                          response.data.results ? response.data.results : [];
+        setAssignments(assignments);
+      } catch (err) {
         console.error("Atamaları çekerken hata:", err);
         setError(err.message);
-      })
-      .finally(() => {
+        setAssignments([]); // Hata durumunda boş array set et
+      } finally {
         setLoading(false);
-      });
-  }, []); // Sadece component mount olduğunda çalışır
+      }
+    };
 
+    fetchAssignments();
+  }, []);
 
   // Modal açma fonksiyonu - Gerekli ID'leri state'e atar
   const openUploadModal = (atama) => {
@@ -114,62 +92,30 @@ const Rapor = () => {
     setModalSuccess('');
     setSubmitting(true);
 
-    const csrftoken = getCookie('csrftoken');
-    if (!csrftoken) {
-      setModalError("Güvenlik token'ı alınamadı.");
-      setSubmitting(false);
-      return;
-    }
-
     const formData = new FormData();
     formData.append('juri_atama', uploadModalData.juriAtamaId);
     formData.append('basvuru', uploadModalData.basvuruId);
-    formData.append('sonuc', decision); // Karar (Olumlu/Olumsuz)
-    formData.append('aciklama', description); // Açıklama
-    formData.append('rapor', reportFile); // Dosyanın kendisi ('rapor' backend'deki FileField adı olmalı)
-
-    console.log("Gönderilen Rapor FormData:");
-    for (let [key, value] of formData.entries()) {
-      console.log(key, value);
-    }
+    formData.append('sonuc', decision);
+    formData.append('aciklama', description);
+    formData.append('rapor', reportFile);
 
     try {
-      // Yeni değerlendirme oluşturmak için POST kullanıyoruz
-      // Eğer güncelleme yapılacaksa method: 'PATCH' veya 'PUT' ve URL'e ID eklenmeli
-      const response = await fetch('http://localhost:8000/api/juri-degerlendirmeler/', {
-        method: 'POST',
+      const response = await api.post('/juri-degerlendirmeler/', formData, {
         headers: {
-          // Content-Type AYARLANMAZ (FormData için)
-          'X-CSRFToken': csrftoken
+          'Content-Type': 'multipart/form-data',
         },
-        credentials: 'include',
-        body: formData
       });
 
-      if (response.ok) {
-        setModalSuccess("Rapor başarıyla yüklendi!");
-        // Listeyi yenilemek için veriyi tekrar çekebiliriz
-        // VEYA dönen yanıtla state'i güncelleyebiliriz
-        const newEvaluation = await response.json();
-        setAssignments(prev => prev.map(assign =>
-            assign.id === uploadModalData.juriAtamaId
-            ? { ...assign, juri_degerlendirme: newEvaluation } // Varsayım: Atama objesi içinde değerlendirme tutuluyor
-            : assign
-        ));
-        // Modalı bir süre sonra kapat
-        setTimeout(() => closeModal(), 1500);
-      } else {
-        const errorData = await response.json();
-        console.error("Rapor yükleme hatası:", errorData);
-        let errorMsg = `Hata (${response.status}): Rapor yüklenemedi. `;
-        for (const key in errorData) {
-            errorMsg += `${key}: ${Array.isArray(errorData[key]) ? errorData[key].join(', ') : errorData[key]} `;
-        }
-        setModalError(errorMsg.trim());
-      }
+      setModalSuccess("Rapor başarıyla yüklendi!");
+      setAssignments(prev => prev.map(assign =>
+        assign.id === uploadModalData.juriAtamaId
+          ? { ...assign, juri_degerlendirme: response.data }
+          : assign
+      ));
+      setTimeout(() => closeModal(), 1500);
     } catch (err) {
-      console.error("Rapor yükleme isteği sırasında hata:", err);
-      setModalError("Rapor yüklenirken bir ağ hatası oluştu.");
+      console.error("Rapor yükleme hatası:", err);
+      setModalError(err.response?.data?.detail || "Rapor yüklenirken bir hata oluştu.");
     } finally {
       setSubmitting(false);
     }
@@ -180,7 +126,7 @@ const Rapor = () => {
      if (!dateString) return "-";
      try {
        return new Date(dateString).toLocaleDateString("tr-TR", { day: '2-digit', month: '2-digit', year: 'numeric' });
-     } catch (e) { return dateString; }
+     } catch { return dateString; }
    };
 
 
