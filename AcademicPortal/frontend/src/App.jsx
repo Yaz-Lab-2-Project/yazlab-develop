@@ -13,6 +13,7 @@ import { useAuth } from "./context/AuthContext"; // useAuth import edildi
 
 // Sayfa Bileşenleri
 import Login from "./pages/auth/Login";
+import Register from "./pages/auth/Register";
 import Listings from "./pages/user/Listings";
 import Apply from "./pages/user/Apply";
 import MyApplications from "./pages/user/MyApplications";
@@ -128,6 +129,7 @@ export default function App() {
             <Routes>
                 <Route path="/" element={<Navigate to="/login" replace />} />
                 <Route path="/login" element={<Login />} />
+                <Route path="/register" element={<Register />} />
 
                 {/* User Routes */}
                 <Route path="/user" element={<ProtectedRoute allowedRole="aday"><UserDashboard /></ProtectedRoute>} />
