@@ -140,7 +140,7 @@ akademik-portal/
 *Yönetici Paneli*
 
 ## Veritabanı Şeması
-Projenin veritabanı şeması [bu bağlantıdan]([Adsız doküman (5).pdf](https://github.com/user-attachments/files/19965602/Adsiz.dokuman.5.pdf)) görüntülenebilir.
+Projenin veritabanı şeması bu bağlantıdan [Veri-Tabanı-Şeması.pdf](https://github.com/user-attachments/files/19965602/Adsiz.dokuman.5.pdf) görüntülenebilir.
 
 ## Katkıda Bulunma
 1. Projeyi fork edin
