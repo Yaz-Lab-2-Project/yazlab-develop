@@ -11,48 +11,28 @@ const Applications = () => {
   const [error, setError] = useState(null);
   const navigate = useNavigate();
   const [expandedRow, setExpandedRow] = useState(null);
+  const [tumBasvurular, setTumBasvurular] = useState([]);
 
   useEffect(() => {
     const fetchApplications = async () => {
       setLoading(true);
       setError(null);
       try {
-        // Önce jüri atamalarını al
+        // Jüri atamalarını al
         const atamalarResponse = await api.get('/juri-atamalar/', {
           params: {
             my_assignments: true
           }
         });
-
         if (!atamalarResponse.data || !Array.isArray(atamalarResponse.data)) {
           throw new Error('Geçersiz veri formatı');
         }
-
-        // Her bir atama için başvuruları al
-        const atamalarWithBasvurular = await Promise.all(
-          atamalarResponse.data.map(async (atama) => {
-            try {
-              const basvurularResponse = await api.get(`/basvurular/`, {
-                params: {
-                  ilan: atama.ilan?.id
-                }
-              });
-              
-              return {
-                ...atama,
-                basvurular: basvurularResponse.data || []
-              };
-            } catch (err) {
-              console.error(`İlan ${atama.ilan?.id} için başvurular alınırken hata:`, err);
-              return {
-                ...atama,
-                basvurular: []
-              };
-            }
-          })
-        );
-
-        setApplications(atamalarWithBasvurular);
+        console.log("Atamalar:", atamalarResponse.data);
+        setApplications(atamalarResponse.data);
+        // Tüm başvuruları al
+        const basvurularResponse = await api.get('/basvurular/');
+        console.log("Başvurular:", basvurularResponse.data);
+        setTumBasvurular(basvurularResponse.data || []);
       } catch (err) {
         console.error('Başvurular yüklenirken hata:', err);
         if (err.response) {
@@ -75,7 +55,6 @@ const Applications = () => {
         setLoading(false);
       }
     };
-
     fetchApplications();
   }, [navigate]);
 
@@ -213,52 +192,55 @@ const Applications = () => {
               </tr>
             </thead>
             <tbody>
-              {filtered.length > 0 ? filtered.map((app) => (
-                <React.Fragment key={app.id}>
-                  <tr>
-                    <td>{app.ilan?.kadro_tipi_ad || app.ilan?.kadro_tipi?.tip || '-'}</td>
-                    <td>{app.ilan?.baslik || '-'}</td>
-                    <td>{app.atama_tarihi ? new Date(app.atama_tarihi).toLocaleDateString('tr-TR') : '-'}</td>
-                    <td>
-                      <button
-                        className="action-button"
-                        onClick={() => setExpandedRow(expandedRow === app.id ? null : app.id)}
-                      >
-                        {expandedRow === app.id ? "Kapat" : "Başvuruları Gör"}
-                      </button>
-                    </td>
-                  </tr>
-                  {expandedRow === app.id && (
+              {filtered.length > 0 ? filtered.map((app) => {
+                const ilgiliBasvurular = tumBasvurular.filter(b => String(b.ilan?.id) === String(app.ilan?.id));
+                return (
+                  <React.Fragment key={app.id}>
                     <tr>
-                      <td colSpan={4} style={{ background: "#f9f9f9", padding: 0 }}>
-                        <div style={{ padding: "18px 0", display: 'flex', justifyContent: 'center' }}>
-                          {app.basvurular && app.basvurular.length > 0 ? (
-                            <div className="basvuru-cards" style={{ justifyContent: app.basvurular.length === 1 ? 'center' : 'flex-start' }}>
-                              {app.basvurular.map((basvuru) => (
-                                <div className="basvuru-card" key={basvuru.id} style={{ minWidth: 180, maxWidth: 260, margin: '0 auto' }}>
-                                  <div className="aday">{basvuru.aday?.first_name} {basvuru.aday?.last_name}</div>
-                                  <div className="tarih">{basvuru.basvuru_tarihi ? new Date(basvuru.basvuru_tarihi).toLocaleDateString('tr-TR') : '-'}</div>
-                                  <div style={{ width: '100%', display: 'flex', justifyContent: 'center' }}>
-                                    <span className={`status-badge status-${(basvuru.durum || 'Beklemede').toLowerCase()}`}>{basvuru.durum}</span>
-                                  </div>
-                                  <button
-                                    className="action-button"
-                                    onClick={() => navigate(`/jury-userapplication/${basvuru.id}`)}
-                                  >
-                                    Detaylar
-                                  </button>
-                                </div>
-                              ))}
-                            </div>
-                          ) : (
-                            <div style={{padding: '12px 0'}}>Bu ilana henüz başvuru yapılmamış.</div>
-                          )}
-                        </div>
+                      <td>{app.ilan?.kadro_tipi_ad || app.ilan?.kadro_tipi?.tip || '-'}</td>
+                      <td>{app.ilan?.baslik || '-'}</td>
+                      <td>{app.atama_tarihi ? new Date(app.atama_tarihi).toLocaleDateString('tr-TR') : '-'}</td>
+                      <td>
+                        <button
+                          className="action-button"
+                          onClick={() => setExpandedRow(expandedRow === app.id ? null : app.id)}
+                        >
+                          {expandedRow === app.id ? "Kapat" : "Başvuruları Gör"}
+                        </button>
                       </td>
                     </tr>
-                  )}
-                </React.Fragment>
-              )) : (
+                    {expandedRow === app.id && (
+                      <tr>
+                        <td colSpan={4} style={{ background: "#f9f9f9", padding: 0 }}>
+                          <div style={{ padding: "18px 0", display: 'flex', justifyContent: 'center' }}>
+                            {ilgiliBasvurular.length > 0 ? (
+                              <div className="basvuru-cards" style={{ justifyContent: ilgiliBasvurular.length === 1 ? 'center' : 'flex-start' }}>
+                                {ilgiliBasvurular.map((basvuru) => (
+                                  <div className="basvuru-card" key={basvuru.id} style={{ minWidth: 180, maxWidth: 260, margin: '0 auto' }}>
+                                    <div className="aday">{basvuru.aday?.first_name} {basvuru.aday?.last_name}</div>
+                                    <div className="tarih">{basvuru.basvuru_tarihi ? new Date(basvuru.basvuru_tarihi).toLocaleDateString('tr-TR') : '-'}</div>
+                                    <div style={{ width: '100%', display: 'flex', justifyContent: 'center' }}>
+                                      <span className={`status-badge status-${(basvuru.durum || 'Beklemede').toLowerCase()}`}>{basvuru.durum}</span>
+                                    </div>
+                                    <button
+                                      className="action-button"
+                                      onClick={() => navigate(`/jury-userapplication/${basvuru.id}`)}
+                                    >
+                                      Detaylar
+                                    </button>
+                                  </div>
+                                ))}
+                              </div>
+                            ) : (
+                              <div style={{padding: '12px 0'}}>Bu ilana henüz başvuru yapılmamış.</div>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    )}
+                  </React.Fragment>
+                );
+              }) : (
                 <tr>
                   <td colSpan="4" style={{ textAlign: 'center', padding: '1rem' }}>
                     {loading ? 'Yükleniyor...' : 'Size atanmış başvuru bulunmamaktadır.'}

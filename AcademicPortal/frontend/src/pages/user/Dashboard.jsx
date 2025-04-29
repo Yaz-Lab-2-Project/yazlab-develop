@@ -70,13 +70,21 @@ const UserDashboard = () => {
       calendar.push(<div key={`empty-${i}`} className="calendar-day empty"></div>);
     }
 
+    // Tarih karşılaştırması için pad fonksiyonu
+    const pad = (n) => n.toString().padStart(2, '0');
+
     for (let day = 1; day <= days; day++) {
       const dayDate = new Date(year, month, day);
-      const currentDateStr = dayDate.toISOString().split("T")[0];
+      const currentDateStr = `${dayDate.getFullYear()}-${pad(dayDate.getMonth() + 1)}-${pad(dayDate.getDate())}`;
 
       // API'den gelen başvuruları filtrele (backend 'basvuru_tarihi' formatına dikkat!)
       const dailyApplications = applications.filter(
-        (b) => b.basvuru_tarihi && b.basvuru_tarihi.startsWith(currentDateStr)
+        (b) => {
+          if (!b.basvuru_tarihi) return false;
+          const d = new Date(b.basvuru_tarihi);
+          const bDateStr = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+          return bDateStr === currentDateStr;
+        }
       );
 
       calendar.push(

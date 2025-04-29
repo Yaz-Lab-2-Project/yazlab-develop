@@ -189,13 +189,15 @@ export default function JuryNavbar() {
                 </NavLink>
               </li>
               <li>
-                <NavLink to="/jury-applications" onClick={closeMenu} className={({ isActive }) => (isActive ? "active" : "")}>
+                <NavLink
+                  to="/jury-applications"
+                  onClick={closeMenu}
+                  className={({ location }) => {
+                    const path = location?.pathname || window.location.pathname;
+                    return (path.startsWith('/jury-applications') || path.startsWith('/jury-userapplication')) ? "active" : "";
+                  }}
+                >
                   <Icon name="agreement" /> Başvurular
-                </NavLink>
-              </li>
-              <li>
-                <NavLink to="/jury-reviews" onClick={closeMenu} className={({ isActive }) => (isActive ? "active" : "")}>
-                  <Icon name="post" /> Değerlendirmelerim
                 </NavLink>
               </li>
               <li>

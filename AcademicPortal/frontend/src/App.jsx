@@ -24,7 +24,6 @@ import AdminApplications from "./pages/admin/Applications";
 import AdminUsers from "./pages/admin/Users";
 import AdminDashboard from "./pages/admin/Dashboard";
 import UserApplication from "./pages/jury/User-Application";
-import Reviews from "./pages/jury/Reviews";
 import Applications from "./pages/jury/Applications";
 import Rapor from "./pages/jury/Rapor";
 import JuryDashboard from "./pages/jury/Dashboard";
@@ -97,7 +96,7 @@ function AuthHandler() {
               // Manager
               '/manager', '/manager-ilan', '/manager-ilan/', '/manager-basvurular', '/manager-criteriapage', '/manager-profile',
               // Jury
-              '/jury', '/jury-rapor', '/jury-reviews', '/jury-applications', '/jury-userapplication'
+              '/jury', '/jury-rapor', '/jury-applications', '/jury-userapplication'
             ];
             const isOnDashboard = dashboardPaths.some(path => location.pathname.startsWith(path));
 
@@ -155,7 +154,6 @@ export default function App() {
                 {/* Jury Routes */}
                 <Route path="/jury" element={<ProtectedRoute allowedRole="juri"><JuryDashboard /></ProtectedRoute>} />
                 <Route path="/jury-rapor" element={<ProtectedRoute allowedRole="juri"><Rapor /></ProtectedRoute>} />
-                <Route path="/jury-reviews" element={<ProtectedRoute allowedRole="juri"><Reviews /></ProtectedRoute>} />
                 <Route path="/jury-applications" element={<ProtectedRoute allowedRole="juri"><Applications /></ProtectedRoute>} />
                 <Route path="/jury-userapplication/:id" element={<ProtectedRoute allowedRole="juri"><UserApplication /></ProtectedRoute>} />
 

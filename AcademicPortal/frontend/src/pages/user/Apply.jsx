@@ -190,7 +190,7 @@ const Apply = () => {
 
     // FormData oluştur
     const formData = new FormData();
-    formData.append('ilan', parseInt(ilanId)); // integer olarak gönder
+    formData.append('ilan_id', parseInt(ilanId)); // integer olarak gönder
 
     let hasMissingFile = false;
     // State'teki dosyaları FormData'ya ekle

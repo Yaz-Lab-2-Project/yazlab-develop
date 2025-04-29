@@ -1,11 +1,10 @@
 // src/pages/auth/Login.jsx
 
 import React, { useState, useEffect } from "react";
-// useNavigate artık burada doğrudan kullanılmayacak (AuthHandler yapacak)
-// import { useNavigate } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext"; // AuthContext hook'unu import et
 import "./Login.css";
 import Logo from "../../assets/kou_logo.png";
+import { useNavigate } from "react-router-dom";
 
 // CSRF token'ı çerezden okumak için yardımcı fonksiyon
 function getCookie(name) {
@@ -29,7 +28,7 @@ const Login = () => {
     const [password, setPassword] = useState("");
     const [error, setError] = useState("");
     const [loading, setLoading] = useState(false);
-    // const navigate = useNavigate(); // Kaldırıldı
+    const navigate = useNavigate();
     const { login } = useAuth(); // Context'ten login fonksiyonunu al
 
     const handleLogin = async (e) => {
@@ -90,6 +89,11 @@ const Login = () => {
         }
     };
 
+    const handleRegisterRedirect = (e) => {
+        e.preventDefault();
+        navigate('/register');
+    };
+
     // CSRF token'ı sayfa yüklendiğinde al
     useEffect(() => {
         fetch('/api/set-csrf/', {
@@ -128,7 +132,7 @@ const Login = () => {
                     </button>
                 </form>
                 <div className="login-links">
-                    <a href="/register">Sisteme kayıt ol</a>
+                    <a href="/register" onClick={handleRegisterRedirect}>Sisteme kayıt ol</a>
                     <a href="/forgot-password">Parolanı mı unuttun?</a>
                 </div>
             </div>

@@ -142,9 +142,36 @@ export default function MyApplications() {
                           Backend Serializer'ınızın bu URL'leri sağladığından emin olun.
                           (settings.py'da MEDIA_URL doğru ayarlanmalı)
                         */}
-                        {app.ozgecmis_dosyasi ? <li><a href={app.ozgecmis_dosyasi} target="_blank" rel="noopener noreferrer"><FaFileAlt style={{ marginRight: "6px", color: "#009944" }} /> Özgeçmiş</a></li> : null}
-                        {app.diploma_belgeleri ? <li><a href={app.diploma_belgeleri} target="_blank" rel="noopener noreferrer"><FaFileAlt style={{ marginRight: "6px", color: "#009944" }} /> Diploma Belgeleri</a></li> : null}
-                        {app.yabanci_dil_belgesi ? <li><a href={app.yabanci_dil_belgesi} target="_blank" rel="noopener noreferrer"><FaFileAlt style={{ marginRight: "6px", color: "#009944" }} /> Yabancı Dil Belgesi</a></li> : null}
+                        {app.ozgecmis_dosyasi ? (
+                          <li>
+                            <a
+                              href={app.ozgecmis_dosyasi}
+                              download={app.ozgecmis_dosyasi.split('/').pop()}
+                            >
+                              <FaFileAlt style={{ marginRight: "6px", color: "#009944" }} /> Özgeçmiş
+                            </a>
+                          </li>
+                        ) : null}
+                        {app.diploma_belgeleri ? (
+                          <li>
+                            <a
+                              href={app.diploma_belgeleri}
+                              download={app.diploma_belgeleri.split('/').pop()}
+                            >
+                              <FaFileAlt style={{ marginRight: "6px", color: "#009944" }} /> Diploma Belgeleri
+                            </a>
+                          </li>
+                        ) : null}
+                        {app.yabanci_dil_belgesi ? (
+                          <li>
+                            <a
+                              href={app.yabanci_dil_belgesi}
+                              download={app.yabanci_dil_belgesi.split('/').pop()}
+                            >
+                              <FaFileAlt style={{ marginRight: "6px", color: "#009944" }} /> Yabancı Dil Belgesi
+                            </a>
+                          </li>
+                        ) : null}
                         {/* Başvuruya bağlı diğer potansiyel dosyalar (AdayFaaliyet vb.) burada listelenebilir */}
                         {/* Eğer API'den sadece dosya adları değil, URL'ler geliyorsa 'href' kısmını ona göre ayarlayın */}
                          {/* Eğer hiç belge URL'i yoksa bir mesaj gösterilebilir */}

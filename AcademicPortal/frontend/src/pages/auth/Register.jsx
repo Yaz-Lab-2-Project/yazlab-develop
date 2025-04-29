@@ -188,7 +188,7 @@ const Register = () => {
         setIsSubmitting(true);
 
         try {
-            await axios.post("http://localhost:3000/api/auth/register", {
+            await axios.post("http://127.0.0.1:8000/api/users/", {
                 username: formData.username, // Username alanını gönder
                 fullName: formData.fullName,
                 identityNumber: formData.identityNumber,

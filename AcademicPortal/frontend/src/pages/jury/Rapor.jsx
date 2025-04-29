@@ -12,7 +12,7 @@ const Rapor = () => {
   const [uploadModalData, setUploadModalData] = useState(null); // Modal açık mı? Hangi atama/başvuru için? { juriAtamaId: number, basvuruId: number, candidateName: string, ilanTitle: string }
   // Modal Form State'leri
   const [reportFile, setReportFile] = useState(null);
-  const [decision, setDecision] = useState("Olumlu"); // Varsayılan karar
+  const [decision, setDecision] = useState("OLUMLU"); // Varsayılan karar
   const [description, setDescription] = useState("");
   const [submitting, setSubmitting] = useState(false); // Form gönderme durumu
   const [modalError, setModalError] = useState(''); // Modal içi hata mesajı
@@ -70,7 +70,7 @@ const Rapor = () => {
      setModalError('');
      setModalSuccess('');
      setReportFile(null); // Önceki seçimi temizle
-     setDecision("Olumlu"); // Varsayılana dön
+     setDecision("OLUMLU"); // Varsayılana dön
      setDescription(""); // Açıklamayı temizle
   };
 
@@ -93,8 +93,8 @@ const Rapor = () => {
     setSubmitting(true);
 
     const formData = new FormData();
-    formData.append('juri_atama', uploadModalData.juriAtamaId);
-    formData.append('basvuru', uploadModalData.basvuruId);
+    formData.append('juri_atama_id', uploadModalData.juriAtamaId);
+    formData.append('basvuru_id', uploadModalData.basvuruId);
     formData.append('sonuc', decision);
     formData.append('aciklama', description);
     formData.append('rapor', reportFile);
@@ -253,8 +253,8 @@ const Rapor = () => {
                     disabled={submitting}
                  >
                   {/* Backend modelindeki choices ile eşleşmeli */}
-                  <option value="Olumlu">Olumlu</option>
-                  <option value="Olumsuz">Olumsuz</option>
+                  <option value="OLUMLU">Olumlu</option>
+                  <option value="OLUMSUZ">Olumsuz</option>
                   {/* <option value="Duzeltme">Düzeltme İstendi</option> */}
                 </select>
 
@@ -290,8 +290,7 @@ const css = `
     .reports-table td { padding: 12px 15px; color: #555; border-bottom: 1px solid #eee; vertical-align: middle; }
     .reports-table tbody tr:hover { background-color: #f8f9fa; }
     .reports-table tr:last-child td { border-bottom: none; }
-    .reports-table td a { color: #007bff; text-decoration: none; }
-    .reports-table td a:hover { text-decoration: underline; }
+    .reports-table td a { color: white; text-decoration: none; }
     .text-red-500 { color: #dc3545; font-style: italic; }
     .text-blue-600 { color: #007bff; } /* Link rengi */
     .button-primary, .button-secondary { padding: 6px 12px; border: none; border-radius: 6px; cursor: pointer; font-size: 0.85rem; transition: background-color 0.2s ease; margin-left: 5px; }
