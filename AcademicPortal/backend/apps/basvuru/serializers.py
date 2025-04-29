@@ -2,15 +2,34 @@ from rest_framework import serializers
 from .models import Basvuru, AdayFaaliyet, BasvuruSonuc, Tablo5
 from apps.users.serializers import UserSerializer
 from apps.ilanlar.serializers import IlanSerializer
+from apps.ilanlar.models import Ilan
 
 class BasvuruSerializer(serializers.ModelSerializer):
     aday = UserSerializer(read_only=True)
-    ilan = IlanSerializer(read_only=True)
+    ilan = serializers.PrimaryKeyRelatedField(queryset=Ilan.objects.all())
+    ozgecmis_dosyasi = serializers.FileField(required=False)
+    diploma_belgeleri = serializers.FileField(required=False)
+    yabanci_dil_belgesi = serializers.FileField(required=False)
 
     class Meta:
         model = Basvuru
         fields = '__all__'
         read_only_fields = ['id', 'basvuru_tarihi', 'guncelleme_tarihi']
+
+    def to_representation(self, instance):
+        """Convert the instance to a representation that includes file URLs"""
+        ret = super().to_representation(instance)
+        request = self.context.get('request')
+        
+        if request is not None:
+            if instance.ozgecmis_dosyasi:
+                ret['ozgecmis_dosyasi'] = request.build_absolute_uri(instance.ozgecmis_dosyasi.url)
+            if instance.diploma_belgeleri:
+                ret['diploma_belgeleri'] = request.build_absolute_uri(instance.diploma_belgeleri.url)
+            if instance.yabanci_dil_belgesi:
+                ret['yabanci_dil_belgesi'] = request.build_absolute_uri(instance.yabanci_dil_belgesi.url)
+        
+        return ret
 
 class AdayFaaliyetSerializer(serializers.ModelSerializer):
     class Meta:

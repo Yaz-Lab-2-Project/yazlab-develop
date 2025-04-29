@@ -15,19 +15,69 @@ const Applications = () => {
   useEffect(() => {
     const fetchApplications = async () => {
       setLoading(true);
+      setError(null);
       try {
-        const response = await api.get('/juri-atamalar/detayli/?my_assignments=true');
-        console.log('API response:', response.data);
-        setApplications(response.data);
+        // Önce jüri atamalarını al
+        const atamalarResponse = await api.get('/juri-atamalar/', {
+          params: {
+            my_assignments: true
+          }
+        });
+
+        if (!atamalarResponse.data || !Array.isArray(atamalarResponse.data)) {
+          throw new Error('Geçersiz veri formatı');
+        }
+
+        // Her bir atama için başvuruları al
+        const atamalarWithBasvurular = await Promise.all(
+          atamalarResponse.data.map(async (atama) => {
+            try {
+              const basvurularResponse = await api.get(`/basvurular/`, {
+                params: {
+                  ilan: atama.ilan?.id
+                }
+              });
+              
+              return {
+                ...atama,
+                basvurular: basvurularResponse.data || []
+              };
+            } catch (err) {
+              console.error(`İlan ${atama.ilan?.id} için başvurular alınırken hata:`, err);
+              return {
+                ...atama,
+                basvurular: []
+              };
+            }
+          })
+        );
+
+        setApplications(atamalarWithBasvurular);
       } catch (err) {
-        setError(err.message);
+        console.error('Başvurular yüklenirken hata:', err);
+        if (err.response) {
+          if (err.response.status === 500) {
+            setError('Sunucu hatası: Lütfen daha sonra tekrar deneyin.');
+          } else if (err.response.status === 401) {
+            setError('Oturum süreniz dolmuş. Lütfen tekrar giriş yapın.');
+            navigate('/login');
+          } else if (err.response.status === 403) {
+            setError('Bu sayfaya erişim yetkiniz yok.');
+          } else {
+            setError(`Sunucu hatası: ${err.response.status} - ${err.response.data?.message || 'Bilinmeyen hata'}`);
+          }
+        } else if (err.request) {
+          setError('Sunucuya bağlanılamıyor. Lütfen internet bağlantınızı kontrol edin.');
+        } else {
+          setError(`Başvurular yüklenirken hata oluştu: ${err.message}`);
+        }
       } finally {
         setLoading(false);
       }
     };
 
     fetchApplications();
-  }, []);
+  }, [navigate]);
 
   const filtered = applications
     .filter(app =>
@@ -58,9 +108,34 @@ const Applications = () => {
       <>
         <JuryNavbar />
         <div className="applications-container">
-          <p>Yükleniyor...</p>
+          <div className="loading-container">
+            <div className="loading-spinner"></div>
+            <p>Başvurular yükleniyor...</p>
+          </div>
         </div>
-        <style>{css}</style>
+        <style>{`
+          ${css}
+          .loading-container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 400px;
+          }
+          .loading-spinner {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #009944;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin-bottom: 20px;
+          }
+          @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+          }
+        `}</style>
       </>
     );
   }
@@ -70,9 +145,44 @@ const Applications = () => {
       <>
         <JuryNavbar />
         <div className="applications-container">
-          <p style={{ color: 'red' }}>Hata: {error}</p>
+          <h1 className="applications-title">Başvurular</h1>
+          <div className="error-container">
+            <p className="error-message">{error}</p>
+            <button 
+              className="retry-button"
+              onClick={() => window.location.reload()}
+            >
+              Yeniden Dene
+            </button>
+          </div>
         </div>
-        <style>{css}</style>
+        <style>{`
+          ${css}
+          .error-container {
+            text-align: center;
+            padding: 40px;
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.06);
+          }
+          .error-message {
+            color: #dc3545;
+            margin-bottom: 20px;
+            font-size: 1.1rem;
+          }
+          .retry-button {
+            padding: 10px 20px;
+            background: #009944;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 1rem;
+          }
+          .retry-button:hover {
+            opacity: 0.9;
+          }
+        `}</style>
       </>
     );
   }
@@ -151,7 +261,7 @@ const Applications = () => {
               )) : (
                 <tr>
                   <td colSpan="4" style={{ textAlign: 'center', padding: '1rem' }}>
-                    {applications.length === 0 ? 'Size atanmış başvuru bulunmamaktadır.' : 'Filtreye uygun başvuru bulunamadı.'}
+                    {loading ? 'Yükleniyor...' : 'Size atanmış başvuru bulunmamaktadır.'}
                   </td>
                 </tr>
               )}

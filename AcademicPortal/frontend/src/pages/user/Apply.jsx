@@ -57,7 +57,6 @@ const Apply = () => {
             { key: 'ozgecmis_dosyasi', label: 'Özgeçmiş Dosyası' },
             { key: 'diploma_belgeleri', label: 'Diploma Belgeleri' },
             { key: 'yabanci_dil_belgesi', label: 'Yabancı Dil Belgesi' },
-            { key: 'akademik_unvan_belgesi', label: 'Akademik Ünvan Belgesi' },
         ];
         setRequiredDocs(backendRequiredDocs);
         const initialDocState = {};
@@ -175,6 +174,13 @@ const Apply = () => {
     setError(null);
     setSubmitting(true);
 
+    // ilanId kontrolü
+    if (!ilanId || isNaN(Number(ilanId))) {
+      setError("İlan bilgisi alınamadı. Lütfen sayfayı yenileyin veya tekrar deneyin.");
+      setSubmitting(false);
+      return;
+    }
+
     const csrftoken = getCookie('csrftoken');
     if (!csrftoken) {
       setError("Güvenlik token'ı alınamadı.");
@@ -184,7 +190,7 @@ const Apply = () => {
 
     // FormData oluştur
     const formData = new FormData();
-    formData.append('ilan', ilanId);
+    formData.append('ilan', parseInt(ilanId)); // integer olarak gönder
 
     let hasMissingFile = false;
     // State'teki dosyaları FormData'ya ekle
@@ -206,7 +212,8 @@ const Apply = () => {
     // Akademik faaliyetleri ekle
     formData.append('academic_activities', JSON.stringify(academicActivities));
 
-    console.log("Gönderilen FormData içeriği:");
+    // Debug için logla
+    console.log("Gönderilecek ilanId:", ilanId);
     for (let [key, value] of formData.entries()) {
       console.log(key, value);
     }
@@ -222,7 +229,7 @@ const Apply = () => {
         navigate('/basvurularim');
       }, 3000);
     } catch (err) {
-      setError(err.response?.data?.message || err.message || "Başvuru gönderilirken bir ağ hatası oluştu.");
+      setError(err.response?.data?.message || err.message || "Başvuru gönderilirken bir ağ hatası oluştu. Lütfen tüm alanları ve dosyaları kontrol edin.");
     } finally {
       setSubmitting(false);
     }

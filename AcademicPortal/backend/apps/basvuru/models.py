@@ -1,7 +1,16 @@
+import os
+from django.utils.text import slugify
 from django.db import models
 from apps.users.models import User
 from apps.ilanlar.models import Ilan
 from apps.faaliyet.models import Faaliyet
+
+def user_file_path(instance, filename, doc_type):
+    user = instance.aday
+    full_name = f"{user.first_name}_{user.last_name}".strip().replace(" ", "_")
+    full_name = slugify(full_name) or "kullanici"
+    ext = filename.split('.')[-1]
+    return f"basvurular/{full_name}-{doc_type}.{ext}"
 
 class Basvuru(models.Model):
     BASVURU_DURUMU_CHOICES = (
@@ -15,9 +24,18 @@ class Basvuru(models.Model):
     durum = models.CharField(max_length=15, choices=BASVURU_DURUMU_CHOICES, default='BEKLEMEDE')
     basvuru_tarihi = models.DateTimeField(auto_now_add=True)
     guncelleme_tarihi = models.DateTimeField(auto_now=True)
-    ozgecmis_dosyasi = models.FileField(upload_to='ozgecmisler/', verbose_name="Özgeçmiş Dosyası")
-    diplama_belgeleri = models.FileField(upload_to='diplomalar/', verbose_name="Diploma Belgeleri")
-    yabanci_dil_belgesi = models.FileField(upload_to='yabanci_dil/', verbose_name="Yabancı Dil Belgesi")
+    ozgecmis_dosyasi = models.FileField(
+        upload_to=lambda instance, filename: user_file_path(instance, filename, "ozgecmis"),
+        verbose_name="Özgeçmiş Dosyası", null=True, blank=True
+    )
+    diploma_belgeleri = models.FileField(
+        upload_to=lambda instance, filename: user_file_path(instance, filename, "diploma"),
+        verbose_name="Diploma Belgeleri", null=True, blank=True
+    )
+    yabanci_dil_belgesi = models.FileField(
+        upload_to=lambda instance, filename: user_file_path(instance, filename, "yabanci_dil"),
+        verbose_name="Yabancı Dil Belgesi", null=True, blank=True
+    )
 
     class Meta:
         verbose_name = 'Başvuru'
@@ -44,7 +62,7 @@ class AdayFaaliyet(models.Model):
 
     def save(self, *args, **kwargs):
         base_puan = self.faaliyet.puan
-        # ... (size’a göre k_katsayisi ve hesaplama) ...
+        # ... (size'a göre k_katsayisi ve hesaplama) ...
         super().save(*args, **kwargs)
 
 class BasvuruSonuc(models.Model):

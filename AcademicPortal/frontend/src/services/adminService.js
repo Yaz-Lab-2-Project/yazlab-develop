@@ -112,18 +112,44 @@ export const advertisementService = {
 export const applicationService = {
   getAll: async (params) => {
     try {
-      const response = await api.get('/basvuru/', { params });
+      const response = await api.get('/basvurular/', { 
+        params,
+        headers: {
+          'Accept': 'application/json',
+          'Content-Type': 'application/json'
+        }
+      });
+      
+      // Yanıtın JSON formatında olduğunu kontrol et
+      if (typeof response.data === 'string' && response.data.includes('<!doctype html>')) {
+        throw new Error('API yanıtı HTML formatında. Lütfen backend servisini kontrol edin.');
+      }
+
       return Array.isArray(response.data?.results) ? response.data.results : 
              Array.isArray(response.data) ? response.data : [];
     } catch (error) {
       console.error('Başvurular alınırken hata:', error);
-      throw error;
+      if (error.response) {
+        // Backend'den gelen hata mesajını göster
+        throw new Error(`Sunucu hatası: ${error.response.status} - ${error.response.data?.message || 'Bilinmeyen hata'}`);
+      } else if (error.request) {
+        // İstek yapıldı ama yanıt alınamadı
+        throw new Error('Sunucuya bağlanılamıyor. Lütfen internet bağlantınızı kontrol edin.');
+      } else {
+        // İstek oluşturulurken hata oluştu
+        throw new Error(`Başvurular alınırken hata oluştu: ${error.message}`);
+      }
     }
   },
   
   getById: async (id) => {
     try {
-      const response = await api.get(`/basvuru/${id}/`);
+      const response = await api.get(`/basvurular/${id}/`, {
+        headers: {
+          'Accept': 'application/json',
+          'Content-Type': 'application/json'
+        }
+      });
       return response.data;
     } catch (error) {
       console.error(`Başvuru (${id}) alınırken hata:`, error);

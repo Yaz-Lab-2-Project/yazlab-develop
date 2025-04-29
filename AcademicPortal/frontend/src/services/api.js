@@ -28,6 +28,7 @@ const api = axios.create({
     baseURL: getBaseURL(),
     headers: {
         'Content-Type': 'application/json',
+        'Accept': 'application/json'
     },
     withCredentials: true,
 });
@@ -57,35 +58,22 @@ api.interceptors.request.use(
 // Response interceptor
 api.interceptors.response.use(
     (response) => {
-        // Başarılı yanıtları doğrudan dön
+        // Yanıtın JSON formatında olduğunu kontrol et
+        if (typeof response.data === 'string' && response.data.includes('<!doctype html>')) {
+            return Promise.reject(new Error('API yanıtı HTML formatında. Lütfen backend servisini kontrol edin.'));
+        }
         return response;
     },
-    async (error) => {
-        if (error.response?.status === 403) {
-            // CSRF token'ı yenile
-            try {
-                await fetch('/api/set-csrf/', {
-                    method: 'GET',
-                    credentials: 'include'
-                });
-                // İsteği tekrar dene
-                const config = error.config;
-                // CSRF token'ı güncelle
-                config.headers['X-CSRFToken'] = getCookie('csrftoken');
-                return api(config);
-            } catch (e) {
-                console.error('CSRF token yenileme hatası:', e);
+    (error) => {
+        if (error.response) {
+            // Backend'den gelen hata
+            if (error.response.status === 401) {
+                // Yetkilendirme hatası - kullanıcıyı login sayfasına yönlendir
+                localStorage.removeItem('authToken');
+                window.location.href = '/login';
             }
         }
-        if (error.response?.status === 401) {
-            // Token geçersiz veya süresi dolmuş
-            localStorage.removeItem('authToken');
-            window.location.href = '/login';
-            return Promise.reject(new Error('Oturum süresi doldu. Lütfen tekrar giriş yapın.'));
-        }
-        // Diğer hataları işle
-        const errorMessage = error.response?.data?.detail || error.message || 'Bir hata oluştu';
-        return Promise.reject(new Error(errorMessage));
+        return Promise.reject(error);
     }
 );
 
