@@ -5,16 +5,39 @@ from apps.basvuru.serializers import BasvuruSerializer
 from apps.users.serializers import UserSerializer
 from apps.basvuru.models import Basvuru
 
+class JuriDegerlendirmeOzetSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = JuriDegerlendirme
+        fields = ['id', 'sonuc', 'rapor', 'aciklama', 'degerlendirme_tarihi']
+
 class JuriAtamaSerializer(serializers.ModelSerializer):
     ilan = IlanSerializer(read_only=True)
     juri_uyesi = UserSerializer(read_only=True)
+    basvuru = serializers.SerializerMethodField()
+    juri_degerlendirme = serializers.SerializerMethodField()
     ilan_id = serializers.IntegerField(write_only=True)
     juri_uyesi_id = serializers.IntegerField(write_only=True)
 
     class Meta:
         model = JuriAtama
-        fields = ['id', 'ilan', 'juri_uyesi', 'atama_tarihi', 'aktif', 'ilan_id', 'juri_uyesi_id']
+        fields = [
+            'id', 'ilan', 'juri_uyesi', 'atama_tarihi', 'aktif',
+            'ilan_id', 'juri_uyesi_id', 'basvuru', 'juri_degerlendirme'
+        ]
         read_only_fields = ['atama_tarihi']
+
+    def get_basvuru(self, obj):
+        # İlgili jüri atamasına ait başvuruyu getir
+        return BasvuruSerializer(
+            Basvuru.objects.filter(ilan=obj.ilan).first()
+        ).data if obj.ilan else None
+
+    def get_juri_degerlendirme(self, obj):
+        # Bu atama ve başvuruya ait değerlendirme varsa getir
+        degerlendirme = obj.degerlendirmeler.first()
+        if degerlendirme:
+            return JuriDegerlendirmeOzetSerializer(degerlendirme).data
+        return None
 
 class JuriDegerlendirmeSerializer(serializers.ModelSerializer):
     juri_atama = JuriAtamaSerializer(read_only=True)
