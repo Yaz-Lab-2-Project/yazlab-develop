@@ -3,16 +3,46 @@ import { useNavigate, Link } from "react-router-dom";
 import axios from "axios";
 import "./Register.css";
 
+// Aynı CSRF token fonksiyonunu ekleyelim
+function getCookie(name) {
+    let cookieValue = null;
+    if (document.cookie && document.cookie !== '') {
+        const cookies = document.cookie.split(';');
+        for (let i = 0; i < cookies.length; i++) {
+            const cookie = cookies[i].trim();
+            if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                break;
+            }
+        }
+    }
+    return cookieValue;
+}
+
+// Users.jsx ile aynı user service yapısını oluşturalım
+const userService = {
+    create: async (userData) => {
+        const csrftoken = getCookie('csrftoken');
+        const response = await axios.post('/api/users/', userData, {
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': csrftoken
+            }
+        });
+        return response.data;
+    }
+};
+
 const Register = () => {
     const [formData, setFormData] = useState({
-        username: "", // Username alanı eklendi
-        fullName: "",
+        username: "",
+        firstName: "",
+        lastName: "",
         identityNumber: "",
         email: "",
         phoneNumber: "",
         password: "",
         confirmPassword: "",
-        birthDate: "",
         address: "",
         academicTitle: "",
     });
@@ -102,22 +132,30 @@ const Register = () => {
                         delete newErrors.identityNumber;
                         setErrors(newErrors);
                     }
+                } else {
+                    const newErrors = {...errors};
+                    delete newErrors.identityNumber;
+                    setErrors(newErrors);
                 }
             }
         } else if (name === "username") {
-            // Username validasyonu ekle (sadece alfanümerik karakterler)
             if (/^[a-zA-Z0-9_]*$/.test(value)) {
                 setFormData({ ...formData, [name]: value });
+                if (value.length >= 3 && /^[a-zA-Z0-9_]+$/.test(value)) {
+                    const newErrors = {...errors};
+                    delete newErrors.username;
+                    setErrors(newErrors);
+                }
             }
         } else {
             setFormData({ ...formData, [name]: value });
         }
 
-        // Password match check
         if (name === "confirmPassword" || (name === "password" && formData.confirmPassword)) {
-            if (name === "confirmPassword" && formData.password !== value) {
-                setErrors({...errors, confirmPassword: "Şifreler eşleşmiyor"});
-            } else if (name === "password" && formData.confirmPassword && formData.confirmPassword !== value) {
+            const passwordToCheck = (name === "password") ? value : formData.password;
+            const confirmPasswordToCheck = (name === "confirmPassword") ? value : formData.confirmPassword;
+
+            if (passwordToCheck && confirmPasswordToCheck && passwordToCheck !== confirmPasswordToCheck) {
                 setErrors({...errors, confirmPassword: "Şifreler eşleşmiyor"});
             } else {
                 const newErrors = {...errors};
@@ -130,23 +168,21 @@ const Register = () => {
     const validateForm = () => {
         const newErrors = {};
         const requiredFields = {
-            username: "Kullanıcı adı gereklidir", // Username hata mesajı eklendi
-            fullName: "Ad Soyad gereklidir",
+            username: "Kullanıcı adı gereklidir",
+            firstName: "Ad gereklidir",
+            lastName: "Soyad gereklidir",
             identityNumber: "TC Kimlik No gereklidir",
             email: "E-posta gereklidir",
             phoneNumber: "Telefon numarası gereklidir",
             password: "Şifre gereklidir",
             confirmPassword: "Şifre tekrarı gereklidir",
-            birthDate: "Doğum tarihi gereklidir",
             academicTitle: "Akademik ünvan seçilmelidir"
         };
 
-        // Check all required fields
         Object.entries(requiredFields).forEach(([field, message]) => {
             if (!formData[field]) newErrors[field] = message;
         });
 
-        // Username validation
         if (formData.username) {
             if (formData.username.length < 3) {
                 newErrors.username = "Kullanıcı adı en az 3 karakter olmalıdır";
@@ -155,7 +191,6 @@ const Register = () => {
             }
         }
 
-        // Format validations
         if (formData.identityNumber && !validateTCKN(formData.identityNumber)) {
             newErrors.identityNumber = "Geçersiz TC Kimlik Numarası";
         }
@@ -165,7 +200,7 @@ const Register = () => {
         }
 
         if (formData.phoneNumber && formData.phoneNumber.replace(/[^\d]/g, '').length !== 11) {
-            newErrors.phoneNumber = "Geçersiz telefon numarası";
+            newErrors.phoneNumber = "Geçersiz telefon numarası (11 hane olmalı)";
         }
 
         if (formData.password && formData.password.length < 8) {
@@ -186,32 +221,63 @@ const Register = () => {
         if (!validateForm()) return;
 
         setIsSubmitting(true);
+        setErrors({});
+        setSuccess("");
 
         try {
-            await axios.post("http://127.0.0.1:8000/api/users/", {
-                username: formData.username, // Username alanını gönder
-                fullName: formData.fullName,
-                identityNumber: formData.identityNumber,
+            // Prepare payload like in Users.jsx
+            const payload = {
+                username: formData.username,
+                first_name: formData.firstName,
+                last_name: formData.lastName,
+                TC_KIMLIK: formData.identityNumber,
                 email: formData.email,
-                phoneNumber: formData.phoneNumber.replace(/[^\d]/g, ''),
+                telefon: formData.phoneNumber.replace(/[^\d]/g, ''),
                 password: formData.password,
-                birthDate: formData.birthDate,
-                address: formData.address,
-                academicTitle: formData.academicTitle,
-                user_type: "ADAY" // Tüm kullanıcıları ADAY olarak ayarla
-            });
+                adres: formData.address,
+                // Eğer akademik_unvan bir ID olarak gönderiliyorsa, integer'a çevir
+                akademik_unvan: formData.academicTitle ? formData.academicTitle : null,
+                user_type: "ADAY"
+            };
 
-            setSuccess("Kayıt başarılı! E-posta adresinize doğrulama bağlantısı gönderildi.");
+            console.log("Sending registration data...");
+            
+            // Call the userService create method like in Users.jsx
+            await userService.create(payload);
+            
+            setSuccess("Kayıt başarılı! Giriş yapabilirsiniz.");
             setTimeout(() => navigate("/login"), 3000);
         } catch (err) {
             console.error("Kayıt hatası:", err);
+            let errorMsg = "Kayıt başarısız oldu. Lütfen daha sonra tekrar deneyin.";
 
-            if (err.response?.data?.message) {
-                setErrors({general: err.response.data.message});
+            if (err.response) {
+                console.error("Backend response data:", err.response.data);
+                console.error("Backend response status:", err.response.status);
+                if (typeof err.response.data === 'object' && err.response.data !== null) {
+                    // Try to extract specific field errors
+                    const backendErrors = Object.entries(err.response.data)
+                        .map(([field, messages]) => `${field}: ${Array.isArray(messages) ? messages.join(', ') : messages}`)
+                        .join('; ');
+                    if (backendErrors) {
+                        errorMsg = `Kayıt hatası: ${backendErrors}`;
+                    } else if (err.response.data.detail) {
+                        errorMsg = err.response.data.detail;
+                    }
+                } else if (typeof err.response.data === 'string') {
+                    errorMsg = err.response.data;
+                }
+            } else if (err.request) {
+                // The request was made but no response was received
+                console.error("No response received:", err.request);
+                errorMsg = "Sunucuya ulaşılamadı. Ağ bağlantınızı kontrol edin.";
             } else {
-                setErrors({general: "Kayıt başarısız oldu. Lütfen daha sonra tekrar deneyin."});
+                // Something happened in setting up the request that triggered an Error
+                console.error('Error setting up request:', err.message);
+                errorMsg = `Bir hata oluştu: ${err.message}`;
             }
 
+            setErrors({ general: errorMsg });
             setIsSubmitting(false);
         }
     };
@@ -233,7 +299,6 @@ const Register = () => {
                     <div className="success-container">
                         <div className="success-icon">✓</div>
                         <h3>{success}</h3>
-                        <p>E-posta adresinize gönderilen doğrulama bağlantısına tıklayarak hesabınızı aktifleştirebilirsiniz.</p>
                         <div className="redirect-message">
                             <span>Giriş sayfasına yönlendiriliyorsunuz</span>
                             <div className="loading-dots">
@@ -258,7 +323,6 @@ const Register = () => {
                         <div className="form-section">
                             <h5 className="section-title">Hesap Bilgileri</h5>
 
-                            {/* Username alanı eklendi */}
                             <div className="form-group">
                                 <label htmlFor="username">Kullanıcı Adı</label>
                                 <input
@@ -269,6 +333,7 @@ const Register = () => {
                                     onChange={handleChange}
                                     className={errors.username ? "error" : ""}
                                     placeholder="Kullanıcı adınızı belirleyin"
+                                    maxLength={150}
                                 />
                                 {errors.username && <span className="error-message">{errors.username}</span>}
                                 <small className="field-hint">Sadece harf, rakam ve alt çizgi (_) kullanabilirsiniz</small>
@@ -280,30 +345,31 @@ const Register = () => {
 
                             <div className="form-row">
                                 <div className="form-group">
-                                    <label htmlFor="fullName">Ad Soyad</label>
+                                    <label htmlFor="firstName">Ad</label>
                                     <input
                                         type="text"
-                                        id="fullName"
-                                        name="fullName"
-                                        value={formData.fullName}
+                                        id="firstName"
+                                        name="firstName"
+                                        value={formData.firstName}
                                         onChange={handleChange}
-                                        className={errors.fullName ? "error" : ""}
-                                        placeholder="Adınızı ve soyadınızı giriniz"
+                                        className={errors.firstName ? "error" : ""}
+                                        placeholder="Adınızı giriniz"
                                     />
-                                    {errors.fullName && <span className="error-message">{errors.fullName}</span>}
+                                    {errors.firstName && <span className="error-message">{errors.firstName}</span>}
                                 </div>
 
                                 <div className="form-group">
-                                    <label htmlFor="birthDate">Doğum Tarihi</label>
+                                    <label htmlFor="lastName">Soyad</label>
                                     <input
-                                        type="date"
-                                        id="birthDate"
-                                        name="birthDate"
-                                        value={formData.birthDate}
+                                        type="text"
+                                        id="lastName"
+                                        name="lastName"
+                                        value={formData.lastName}
                                         onChange={handleChange}
-                                        className={errors.birthDate ? "error" : ""}
+                                        className={errors.lastName ? "error" : ""}
+                                        placeholder="Soyadınızı giriniz"
                                     />
-                                    {errors.birthDate && <span className="error-message">{errors.birthDate}</span>}
+                                    {errors.lastName && <span className="error-message">{errors.lastName}</span>}
                                 </div>
                             </div>
 
@@ -318,6 +384,7 @@ const Register = () => {
                                         onChange={handleChange}
                                         className={errors.identityNumber ? "error" : ""}
                                         placeholder="11 haneli TC Kimlik numaranız"
+                                        maxLength={11}
                                     />
                                     {errors.identityNumber && <span className="error-message">{errors.identityNumber}</span>}
                                 </div>
@@ -332,9 +399,11 @@ const Register = () => {
                                         className={errors.academicTitle ? "error" : ""}
                                     >
                                         <option value="">Akademik ünvanınızı seçiniz</option>
-                                        <option value="professor">Profesör</option>
-                                        <option value="associate">Doçent</option>
-                                        <option value="assistant">Dr. Öğretim Üyesi</option>
+                                        <option value="PROFESOR">Profesör</option>
+                                        <option value="DOCENT">Doçent</option>
+                                        <option value="DR_OGRETIM_UYESI">Dr. Öğretim Üyesi</option>
+                                        <option value="OGRETIM_GOREVLISI">Öğretim Görevlisi</option>
+                                        <option value="ARASTIRMA_GOREVLISI">Araştırma Görevlisi</option>
                                     </select>
                                     {errors.academicTitle && <span className="error-message">{errors.academicTitle}</span>}
                                 </div>
@@ -354,7 +423,7 @@ const Register = () => {
                                         value={formData.email}
                                         onChange={handleChange}
                                         className={errors.email ? "error" : ""}
-                                        placeholder="örnek@domain.com"
+                                        placeholder="ornek@kou.edu.tr"
                                     />
                                     {errors.email && <span className="error-message">{errors.email}</span>}
                                 </div>
@@ -362,13 +431,14 @@ const Register = () => {
                                 <div className="form-group">
                                     <label htmlFor="phoneNumber">Telefon Numarası</label>
                                     <input
-                                        type="text"
+                                        type="tel"
                                         id="phoneNumber"
                                         name="phoneNumber"
                                         value={formData.phoneNumber}
                                         onChange={handleChange}
-                                        placeholder="0(5XX) XXX-XXXX"
+                                        placeholder="0(XXX) XXX-XXXX"
                                         className={errors.phoneNumber ? "error" : ""}
+                                        maxLength={15}
                                     />
                                     {errors.phoneNumber && <span className="error-message">{errors.phoneNumber}</span>}
                                 </div>

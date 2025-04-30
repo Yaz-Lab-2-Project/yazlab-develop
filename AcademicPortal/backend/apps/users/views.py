@@ -11,6 +11,22 @@ from .serializers import UserSerializer
 
 User = get_user_model()
 
+# Direct registration API view - circumventing authentication issues
+@api_view(['POST'])
+@func_permission_classes([AllowAny])
+def register_user(request):
+    """
+    Public registration endpoint without authentication
+    """
+    serializer = UserSerializer(data=request.data)
+    if serializer.is_valid():
+        user = serializer.save()
+        return Response(
+            {"success": True, "message": "User registered successfully", "id": user.id},
+            status=status.HTTP_201_CREATED
+        )
+    return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
 class UserViewSet(viewsets.ModelViewSet):
     """
     API endpoint that allows users to be viewed or edited.
@@ -18,6 +34,17 @@ class UserViewSet(viewsets.ModelViewSet):
     queryset = User.objects.all().order_by('-date_joined')
     serializer_class = UserSerializer
     permission_classes = [IsAuthenticated]
+
+    # Add permission_classes for the create method to allow registration
+    def get_permissions(self):
+        """
+        Instantiates and returns the list of permissions that this view requires.
+        """
+        if self.action == 'create':
+            permission_classes = [AllowAny]
+        else:
+            permission_classes = [IsAuthenticated]
+        return [permission() for permission in permission_classes]
 
     def get_queryset(self):
         """
@@ -55,6 +82,18 @@ class UserViewSet(viewsets.ModelViewSet):
             
         users = queryset.values('id', 'first_name', 'last_name', 'TC_KIMLIK')
         return Response(users)
+        
+    # Add a dedicated registration endpoint with AllowAny permission
+    @action(detail=False, methods=['post'], permission_classes=[AllowAny])
+    def register(self, request):
+        """
+        Yeni kullanıcı kaydı için özel endpoint
+        """
+        serializer = self.get_serializer(data=request.data)
+        if serializer.is_valid():
+            serializer.save()
+            return Response(serializer.data, status=status.HTTP_201_CREATED)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 @ensure_csrf_cookie
 @api_view(['GET'])

@@ -11,7 +11,7 @@ const Applications = () => {
   const [error, setError] = useState(null);
   const navigate = useNavigate();
   const [expandedRow, setExpandedRow] = useState(null);
-  const [tumBasvurular, setTumBasvurular] = useState([]);
+  const [tumBasvurular, setTumBasvurular] = useState({});
 
   useEffect(() => {
     const fetchApplications = async () => {
@@ -29,10 +29,24 @@ const Applications = () => {
         }
         console.log("Atamalar:", atamalarResponse.data);
         setApplications(atamalarResponse.data);
+
         // Tüm başvuruları al
         const basvurularResponse = await api.get('/basvurular/');
         console.log("Başvurular:", basvurularResponse.data);
-        setTumBasvurular(basvurularResponse.data || []);
+
+        // İlan ID'lerine göre başvuruları grupla
+        const basvurularMap = {};
+        basvurularResponse.data.forEach(basvuru => {
+          const ilanId = basvuru.ilan;
+          if (ilanId) {
+            if (!basvurularMap[ilanId]) {
+              basvurularMap[ilanId] = [];
+            }
+            basvurularMap[ilanId].push(basvuru);
+          }
+        });
+
+        setTumBasvurular(basvurularMap);
       } catch (err) {
         console.error('Başvurular yüklenirken hata:', err);
         if (err.response) {
@@ -193,7 +207,9 @@ const Applications = () => {
             </thead>
             <tbody>
               {filtered.length > 0 ? filtered.map((app) => {
-                const ilgiliBasvurular = tumBasvurular.filter(b => String(b.ilan?.id) === String(app.ilan?.id));
+                const ilanId = app.ilan?.id;
+                const ilgiliBasvurular = ilanId ? (tumBasvurular[ilanId] || []) : [];
+                
                 return (
                   <React.Fragment key={app.id}>
                     <tr>

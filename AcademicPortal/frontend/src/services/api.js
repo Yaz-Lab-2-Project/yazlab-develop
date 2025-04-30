@@ -68,9 +68,20 @@ api.interceptors.response.use(
         if (error.response) {
             // Backend'den gelen hata
             if (error.response.status === 401) {
-                // Yetkilendirme hatası - kullanıcıyı login sayfasına yönlendir
+                // Kayıt endpointi için yönlendirmeyi atla (401 beklenebilir)
+                if (error.config.url && 
+                   (error.config.url.includes('/users/register') || 
+                    error.config.url.includes('/auth/register'))) {
+                    return Promise.reject(error);
+                }
+                
+                // Diğer 401 hataları için logout
                 localStorage.removeItem('authToken');
-                window.location.href = '/login';
+                // Eğer zaten login sayfasında değilse yönlendir
+                if (!window.location.pathname.includes('/login') && 
+                    !window.location.pathname.includes('/register')) {
+                    window.location.href = '/login';
+                }
             }
         }
         return Promise.reject(error);

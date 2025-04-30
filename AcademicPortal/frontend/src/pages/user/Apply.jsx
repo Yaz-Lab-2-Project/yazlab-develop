@@ -190,37 +190,30 @@ const Apply = () => {
 
     // FormData oluştur
     const formData = new FormData();
-    formData.append('ilan_id', parseInt(ilanId)); // integer olarak gönder
+    formData.append('ilan', ilanId); // Backend'de ilan_id yerine ilan bekleniyor
 
-    let hasMissingFile = false;
     // State'teki dosyaları FormData'ya ekle
     requiredDocs.forEach(doc => {
       if (applicationData[doc.key] instanceof File) {
         formData.append(doc.key, applicationData[doc.key]);
-      } else {
-          console.error(`Eksik dosya: ${doc.label}`);
-          hasMissingFile = true;
       }
     });
-
-    if (hasMissingFile) {
-        setError("Lütfen gerekli tüm belgeleri yükleyin.");
-        setSubmitting(false);
-        return;
-    }
 
     // Akademik faaliyetleri ekle
     formData.append('academic_activities', JSON.stringify(academicActivities));
 
     // Debug için logla
-    console.log("Gönderilecek ilanId:", ilanId);
+    console.log("Gönderilecek veriler:");
     for (let [key, value] of formData.entries()) {
       console.log(key, value);
     }
 
     try {
       await api.post('/basvurular/', formData, {
-        headers: { 'Content-Type': 'multipart/form-data' }
+        headers: { 
+          'Content-Type': 'multipart/form-data',
+          'X-CSRFToken': csrftoken
+        }
       });
       setSubmitted(true);
 
@@ -229,7 +222,8 @@ const Apply = () => {
         navigate('/basvurularim');
       }, 3000);
     } catch (err) {
-      setError(err.response?.data?.message || err.message || "Başvuru gönderilirken bir ağ hatası oluştu. Lütfen tüm alanları ve dosyaları kontrol edin.");
+      console.error('Başvuru hatası:', err.response?.data || err);
+      setError(err.response?.data?.message || err.response?.data?.detail || err.message || "Başvuru gönderilirken bir hata oluştu. Lütfen tüm alanları ve dosyaları kontrol edin.");
     } finally {
       setSubmitting(false);
     }

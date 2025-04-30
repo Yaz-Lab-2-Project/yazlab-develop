@@ -4,6 +4,8 @@ from django.db import models
 from apps.users.models import User
 from apps.ilanlar.models import Ilan
 from apps.faaliyet.models import Faaliyet
+from django.conf import settings
+from datetime import datetime
 
 def user_file_path(instance, filename, doc_type):
     user = instance.aday
@@ -11,6 +13,15 @@ def user_file_path(instance, filename, doc_type):
     full_name = slugify(full_name) or "kullanici"
     ext = filename.split('.')[-1]
     return f"basvurular/{full_name}-{doc_type}.{ext}"
+
+def ozgecmis_upload_path(instance, filename):
+    return user_file_path(instance, filename, "ozgecmis")
+
+def diploma_upload_path(instance, filename):
+    return user_file_path(instance, filename, "diploma")
+
+def yabanci_dil_upload_path(instance, filename):
+    return user_file_path(instance, filename, "yabanci_dil")
 
 class Basvuru(models.Model):
     BASVURU_DURUMU_CHOICES = (
@@ -25,15 +36,15 @@ class Basvuru(models.Model):
     basvuru_tarihi = models.DateTimeField(auto_now_add=True)
     guncelleme_tarihi = models.DateTimeField(auto_now=True)
     ozgecmis_dosyasi = models.FileField(
-        upload_to=lambda instance, filename: user_file_path(instance, filename, "ozgecmis"),
+        upload_to=ozgecmis_upload_path,
         verbose_name="Özgeçmiş Dosyası", null=True, blank=True
     )
     diploma_belgeleri = models.FileField(
-        upload_to=lambda instance, filename: user_file_path(instance, filename, "diploma"),
+        upload_to=diploma_upload_path,
         verbose_name="Diploma Belgeleri", null=True, blank=True
     )
     yabanci_dil_belgesi = models.FileField(
-        upload_to=lambda instance, filename: user_file_path(instance, filename, "yabanci_dil"),
+        upload_to=yabanci_dil_upload_path,
         verbose_name="Yabancı Dil Belgesi", null=True, blank=True
     )
 
@@ -87,3 +98,51 @@ class Tablo5(models.Model):
     class Meta:
         verbose_name = 'Tablo 5'
         verbose_name_plural = 'Tablo 5 Dosyaları'
+
+def degerlendirme_belgesi_path(instance, filename):
+    # UUID ve timestamp kullanarak benzersiz dosya adı oluştur
+    # ID kullanmıyoruz çünkü dosya kaydedilirken ID henüz oluşmamış olabilir
+    timestamp = datetime.now().strftime('%Y%m%d%H%M%S')
+    filename_base, ext = os.path.splitext(filename)
+    safe_filename = slugify(filename_base) or 'belge'
+    
+    if hasattr(instance, 'basvuru') and instance.basvuru and hasattr(instance.basvuru, 'aday'):
+        try:
+            aday = instance.basvuru.aday
+            aday_name = slugify(f"{aday.first_name}_{aday.last_name}")
+        except:
+            aday_name = 'isimsiz_aday'
+    else:
+        aday_name = 'isimsiz_aday'
+        
+    if hasattr(instance, 'yukleyen'):
+        try:
+            yukleyen = instance.yukleyen
+            yukleyen_name = slugify(f"{yukleyen.first_name}_{yukleyen.last_name}")
+        except:
+            yukleyen_name = 'isimsiz_yukleyen'
+    else:
+        yukleyen_name = 'isimsiz_yukleyen'
+        
+    return f"degerlendirme_belgeleri/{aday_name}_{yukleyen_name}_{timestamp}{ext}"
+
+class DegerlendirmeBelgesi(models.Model):
+    basvuru = models.ForeignKey(Basvuru, on_delete=models.CASCADE, related_name='degerlendirme_belgeleri')
+    belge = models.FileField(upload_to=degerlendirme_belgesi_path)
+    belge_adi = models.CharField(max_length=255, blank=True)
+    yukleyen = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
+    yukleme_tarihi = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = 'Değerlendirme Belgesi'
+        verbose_name_plural = 'Değerlendirme Belgeleri'
+        ordering = ['-yukleme_tarihi']
+
+    def __str__(self):
+        aday_isim = "Bilinmeyen Aday"
+        if self.basvuru and hasattr(self.basvuru, 'aday') and hasattr(self.basvuru.aday, 'get_full_name'):
+            try:
+                aday_isim = self.basvuru.aday.get_full_name()
+            except:
+                pass
+        return f"{aday_isim} - {self.belge_adi or self.belge.name}"

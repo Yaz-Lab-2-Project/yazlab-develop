@@ -11,6 +11,11 @@ export default defineConfig({
         changeOrigin: true,
         // secure: false, // HTTPS + self-signed sertifika ise açılabilir
       },
+      // /media ile başlayan istekleri de backend'e yönlendir
+      '/media': {
+        target: 'http://127.0.0.1:8000',
+        changeOrigin: true,
+      },
     },
   },
   build: {

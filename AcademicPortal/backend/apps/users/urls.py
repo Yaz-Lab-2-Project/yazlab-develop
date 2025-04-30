@@ -10,6 +10,9 @@ router = DefaultRouter()
 router.register(r'', views.UserViewSet, basename='user')
 
 urlpatterns = [
+    # Public registration endpoint - should be BEFORE router include
+    path('register/', views.register_user, name='register'), 
+    # General API routing 
     path('', include(router.urls)),
     path('csrf/', views.set_csrf_token, name='csrf'),
     # Şu anda bu app için özel bir URL tanımlamıyoruz.
