@@ -122,7 +122,7 @@ USE_L10N = True
 USE_TZ = True
 
 # Statik dosyalar (CSS/JS/Assets)
-STATIC_URL = '/static/'
+STATIC_URL = '/assets/'
 STATICFILES_DIRS = [
     BASE_DIR.parent / 'frontend' / 'dist' / 'assets',
 ]

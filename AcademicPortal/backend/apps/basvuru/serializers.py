@@ -6,8 +6,7 @@ from apps.ilanlar.models import Ilan
 
 class BasvuruSerializer(serializers.ModelSerializer):
     aday = UserSerializer(read_only=True)
-    ilan = IlanSerializer(read_only=True)
-    ilan_id = serializers.PrimaryKeyRelatedField(queryset=Ilan.objects.all(), write_only=True, source='ilan')
+    ilan = serializers.PrimaryKeyRelatedField(queryset=Ilan.objects.all())
     ozgecmis_dosyasi = serializers.FileField(required=False)
     diploma_belgeleri = serializers.FileField(required=False)
     yabanci_dil_belgesi = serializers.FileField(required=False)
